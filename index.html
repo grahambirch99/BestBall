@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>bestball.lab — BBM7 Draft Companion</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🏈</text></svg>">
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>body{margin:0;background:#080b10}#root:empty::after{content:"loading bestball.lab...";display:block;text-align:center;padding:60px 0;color:#3a4d63;font-family:monospace;font-size:13px}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+// ── localStorage shim (replaces Claude artifact storage on GitHub Pages) ──
+window.storage = {
+  get: async (k) => { const v = localStorage.getItem(k); return v == null ? null : { key: k, value: v }; },
+  set: async (k, v) => { localStorage.setItem(k, v); return { key: k, value: v }; },
+  delete: async (k) => { localStorage.removeItem(k); return { key: k, deleted: true }; },
+};
+
+const { useState, useMemo, useRef, useEffect, useCallback } = React;
+
+// ══════════════════════════════════════════════════════
+// DATA (live UD ADP June 8 2026 · 277 players · 2026 schedule)
+// ══════════════════════════════════════════════════════
+const PLAYERS = [
+  // Complete BBM7 pool — live UD ADP June 8 2026 (277 players, full 18-round depth)
+  // DK ADP: REAL RotoWire June 1 2026 chart for ~110 players; dkEst:1 = estimated (no real DK data)
+  {n:"Jahmyr Gibbs",pos:"RB",tm:"DET",udAdp:1.3,dkAdp:1.7,div:"NFC-N",proj:277.9},
+  {n:"Bijan Robinson",pos:"RB",tm:"ATL",udAdp:1.8,dkAdp:1.6,div:"NFC-S",proj:294.9},
+  {n:"Ja'Marr Chase",pos:"WR",tm:"CIN",udAdp:3.1,dkAdp:3.1,div:"AFC-N",proj:250.6},
+  {n:"Puka Nacua",pos:"WR",tm:"LAR",udAdp:4.0,dkAdp:4.0,div:"NFC-W",proj:259.0},
+  {n:"Jaxon Smith-Njigba",pos:"WR",tm:"SEA",udAdp:5.2,dkAdp:5.4,div:"NFC-W",proj:235.1},
+  {n:"Jonathan Taylor",pos:"RB",tm:"IND",udAdp:6.8,dkAdp:7.8,div:"AFC-S",proj:256.3},
+  {n:"Christian McCaffrey",pos:"RB",tm:"SF",udAdp:7.2,dkAdp:6.2,div:"NFC-W",proj:260.0},
+  {n:"Amon-Ra St. Brown",pos:"WR",tm:"DET",udAdp:7.7,dkAdp:8.0,div:"NFC-N",proj:227.5},
+  {n:"CeeDee Lamb",pos:"WR",tm:"DAL",udAdp:9.6,dkAdp:10.7,div:"NFC-E",proj:222.5},
+  {n:"Justin Jefferson",pos:"WR",tm:"MIN",udAdp:9.7,dkAdp:9.0,div:"NFC-N",proj:202.1},
+  {n:"James Cook",pos:"RB",tm:"BUF",udAdp:11.2,dkAdp:10.4,div:"AFC-E",proj:247.3},
+  {n:"Ashton Jeanty",pos:"RB",tm:"LV",udAdp:11.5,dkAdp:12.3,div:"AFC-W",proj:238.5},
+  {n:"Saquon Barkley",pos:"RB",tm:"PHI",udAdp:13.8,dkAdp:13.5,div:"NFC-E",proj:226.0},
+  {n:"De'Von Achane",pos:"RB",tm:"MIA",udAdp:15.2,dkAdp:15.4,div:"AFC-E",proj:226.0},
+  {n:"Omarion Hampton",pos:"RB",tm:"LAC",udAdp:15.7,dkAdp:17.1,div:"AFC-W",proj:221.9},
+  {n:"Kenneth Walker III",pos:"RB",tm:"KC",udAdp:16.7,dkAdp:15.7,div:"AFC-W",proj:212.0},
+  {n:"Chase Brown",pos:"RB",tm:"CIN",udAdp:17.0,dkAdp:17.8,div:"AFC-N",proj:209.8},
+  {n:"Derrick Henry",pos:"RB",tm:"BAL",udAdp:17.5,dkAdp:19.4,div:"AFC-N",proj:238.2},
+  {n:"Drake London",pos:"WR",tm:"ATL",udAdp:18.3,dkAdp:16.7,div:"NFC-S",proj:195.7},
+  {n:"Brock Bowers",pos:"TE",tm:"LV",udAdp:20.1,dkAdp:19.6,div:"AFC-W",proj:188.0},
+  {n:"A.J. Brown",pos:"WR",tm:"NE",udAdp:20.6,dkAdp:27.3,div:"AFC-E",proj:193.8},
+  {n:"Nico Collins",pos:"WR",tm:"HOU",udAdp:23.0,dkAdp:23.3,div:"AFC-S",proj:196.0},
+  {n:"Jeremiyah Love",pos:"RB",tm:"ARI",udAdp:23.1,dkAdp:25.3,div:"NFC-W",proj:193.0},
+  {n:"George Pickens",pos:"WR",tm:"DAL",udAdp:24.3,dkAdp:22.6,div:"NFC-E",proj:195.9},
+  {n:"Trey McBride",pos:"TE",tm:"ARI",udAdp:26.5,dkAdp:21.8,div:"NFC-W",proj:191.4},
+  {n:"Breece Hall",pos:"RB",tm:"NYJ",udAdp:26.9,dkAdp:30.8,div:"AFC-E",proj:199.6},
+  {n:"Chris Olave",pos:"WR",tm:"NO",udAdp:27.7,dkAdp:25.5,div:"NFC-S",proj:189.8},
+  {n:"DeVonta Smith",pos:"WR",tm:"PHI",udAdp:28.0,dkAdp:31.7,div:"NFC-E",proj:179.1},
+  {n:"Travis Etienne Jr.",pos:"RB",tm:"NO",udAdp:29.2,dkAdp:33.3,div:"NFC-S",proj:195.9},
+  {n:"Rashee Rice",pos:"WR",tm:"KC",udAdp:30.3,dkAdp:30.6,div:"AFC-W",proj:162.0},
+  {n:"Kyren Williams",pos:"RB",tm:"LAR",udAdp:31.5,dkAdp:28.9,div:"NFC-W",proj:189.3},
+  {n:"Malik Nabers",pos:"WR",tm:"NYG",udAdp:32.4,dkAdp:31.8,div:"NFC-E",proj:189.6},
+  {n:"Josh Allen",pos:"QB",tm:"BUF",udAdp:33.0,dkAdp:24.6,div:"AFC-E",proj:363.5},
+  {n:"Zay Flowers",pos:"WR",tm:"BAL",udAdp:34.3,dkAdp:36.6,div:"AFC-N",proj:187.2},
+  {n:"Tee Higgins",pos:"WR",tm:"CIN",udAdp:34.5,dkAdp:35.7,div:"AFC-N",proj:172.6},
+  {n:"Javonte Williams",pos:"RB",tm:"DAL",udAdp:35.2,dkAdp:37.8,div:"NFC-E",proj:187.8},
+  {n:"Tetairoa McMillan",pos:"WR",tm:"CAR",udAdp:37.9,dkAdp:40.7,div:"NFC-S",proj:176.9},
+  {n:"Ladd McConkey",pos:"WR",tm:"LAC",udAdp:38.0,dkAdp:37.3,div:"AFC-W",proj:171.8},
+  {n:"Garrett Wilson",pos:"WR",tm:"NYJ",udAdp:38.3,dkAdp:40.0,div:"AFC-E",proj:188.1},
+  {n:"Josh Jacobs",pos:"RB",tm:"GB",udAdp:39.1,dkAdp:43.3,div:"NFC-N",proj:188.1},
+  {n:"Emeka Egbuka",pos:"WR",tm:"TB",udAdp:39.9,dkAdp:33.0,div:"NFC-S",proj:163.6},
+  {n:"Luther Burden",pos:"WR",tm:"CHI",udAdp:41.7,dkAdp:44.5,div:"NFC-N",proj:166.7},
+  {n:"Cam Skattebo",pos:"RB",tm:"NYG",udAdp:43.9,dkAdp:44.5,div:"NFC-E",proj:170.7},
+  {n:"Mike Evans",pos:"WR",tm:"SF",udAdp:44.5,dkAdp:53.1,div:"NFC-W",proj:171.0},
+  {n:"Terry McLaurin",pos:"WR",tm:"WAS",udAdp:45.4,dkAdp:46.5,div:"NFC-E",proj:165.6},
+  {n:"Colston Loveland",pos:"TE",tm:"CHI",udAdp:46.1,dkAdp:40.9,div:"NFC-N",proj:161.9},
+  {n:"Jameson Williams",pos:"WR",tm:"DET",udAdp:48.2,dkAdp:50.9,div:"NFC-N",proj:176.2},
+  {n:"TreVeyon Henderson",pos:"RB",tm:"NE",udAdp:48.8,dkAdp:58.0,div:"AFC-E",proj:164.0},
+  {n:"Jaylen Waddle",pos:"WR",tm:"DEN",udAdp:49.4,dkAdp:49.3,div:"AFC-W",proj:155.0},
+  {n:"David Montgomery",pos:"RB",tm:"HOU",udAdp:49.4,dkAdp:53.6,div:"AFC-S",proj:182.4},
+  {n:"Davante Adams",pos:"WR",tm:"LAR",udAdp:50.9,dkAdp:46.3,div:"NFC-W",proj:155.7},
+  {n:"D'Andre Swift",pos:"RB",tm:"CHI",udAdp:51.8,dkAdp:54.3,div:"NFC-N",proj:177.4},
+  {n:"Bucky Irving",pos:"RB",tm:"TB",udAdp:53.4,dkAdp:54.5,div:"NFC-S",proj:183.3},
+  {n:"D.J. Moore",pos:"WR",tm:"BUF",udAdp:54.7,dkAdp:43.4,div:"AFC-E",proj:149.5},
+  {n:"Quinshon Judkins",pos:"RB",tm:"CLE",udAdp:55.2,dkAdp:52.3,div:"AFC-N",proj:169.8},
+  {n:"Lamar Jackson",pos:"QB",tm:"BAL",udAdp:56.1,dkAdp:50.8,div:"AFC-N",proj:326.0},
+  {n:"Christian Watson",pos:"WR",tm:"GB",udAdp:56.9,dkAdp:58.1,div:"NFC-N",proj:159.9},
+  {n:"Rome Odunze",pos:"WR",tm:"CHI",udAdp:57.0,dkAdp:55.0,div:"NFC-N",proj:156.7},
+  {n:"Jadarian Price",pos:"RB",tm:"SEA",udAdp:58.8,dkAdp:59.2,div:"NFC-W",proj:140.0},
+  {n:"Carnell Tate",pos:"WR",tm:"TEN",udAdp:59.4,dkAdp:62.1,div:"AFC-S",proj:166.0},
+  {n:"Bhayshul Tuten",pos:"RB",tm:"JAX",udAdp:59.6,dkAdp:64.1,div:"AFC-S",proj:154.9},
+  {n:"Jordyn Tyson",pos:"WR",tm:"NO",udAdp:62.9,dkAdp:66.7,div:"NFC-S",proj:165.0},
+  {n:"Brian Thomas Jr.",pos:"WR",tm:"JAX",udAdp:63.5,dkAdp:73.5,div:"AFC-S",proj:152.9},
+  {n:"Joe Burrow",pos:"QB",tm:"CIN",udAdp:65.2,dkAdp:56.7,div:"AFC-N",proj:308.1},
+  {n:"Tyler Warren",pos:"TE",tm:"IND",udAdp:65.7,dkAdp:61.6,div:"AFC-S",proj:151.2},
+  {n:"Jayden Daniels",pos:"QB",tm:"WAS",udAdp:67.1,dkAdp:68.5,div:"NFC-E",proj:317.7},
+  {n:"Marvin Harrison Jr.",pos:"WR",tm:"ARI",udAdp:68.0,dkAdp:66.0,div:"NFC-W",proj:145.7},
+  {n:"Caleb Williams",pos:"QB",tm:"CHI",udAdp:69.1,dkAdp:69.3,div:"NFC-N",proj:303.3},
+  {n:"Drake Maye",pos:"QB",tm:"NE",udAdp:69.4,dkAdp:67.9,div:"AFC-E",proj:324.8},
+  {n:"Parker Washington",pos:"WR",tm:"JAX",udAdp:69.7,dkAdp:64.1,div:"AFC-S",proj:156.2},
+  {n:"Chuba Hubbard",pos:"RB",tm:"CAR",udAdp:70.7,dkAdp:70.9,div:"NFC-S",proj:161.1},
+  {n:"Jalen Hurts",pos:"QB",tm:"PHI",udAdp:71.9,dkAdp:75.4,div:"NFC-E",proj:314.5},
+  {n:"Makai Lemon",pos:"WR",tm:"PHI",udAdp:72.4,dkAdp:80.5,div:"NFC-E",proj:161.0},
+  {n:"Alec Pierce",pos:"WR",tm:"IND",udAdp:73.3,dkAdp:71.9,div:"AFC-S",proj:157.0},
+  {n:"Rhamondre Stevenson",pos:"RB",tm:"NE",udAdp:75.8,dkAdp:76.2,div:"AFC-E",proj:159.9},
+  {n:"Jaylen Warren",pos:"RB",tm:"PIT",udAdp:76.3,dkAdp:83.3,div:"AFC-N",proj:156.6},
+  {n:"DK Metcalf",pos:"WR",tm:"PIT",udAdp:76.9,dkAdp:73.1,div:"AFC-N",proj:152.3},
+  {n:"Tony Pollard",pos:"RB",tm:"TEN",udAdp:77.8,dkAdp:79.2,div:"AFC-S",proj:148.1},
+  {n:"Dak Prescott",pos:"QB",tm:"DAL",udAdp:79.4,dkAdp:75.7,div:"NFC-E",proj:303.9},
+  {n:"Courtland Sutton",pos:"WR",tm:"DEN",udAdp:80.7,dkAdp:82.3,div:"AFC-W",proj:139.5},
+  {n:"Justin Herbert",pos:"QB",tm:"LAC",udAdp:81.4,dkAdp:83.9,div:"AFC-W",proj:307.3},
+  {n:"Tucker Kraft",pos:"TE",tm:"GB",udAdp:82.4,dkAdp:79.5,div:"NFC-N",proj:134.8},
+  {n:"Jayden Reed",pos:"WR",tm:"GB",udAdp:83.1,dkAdp:90.3,div:"NFC-N",proj:138.8},
+  {n:"RJ Harvey",pos:"RB",tm:"DEN",udAdp:85.1,dkAdp:77.3,div:"AFC-W",proj:141.8},
+  {n:"Jordan Addison",pos:"WR",tm:"MIN",udAdp:86.3,dkAdp:95.6,div:"NFC-N",proj:134.1},
+  {n:"Trevor Lawrence",pos:"QB",tm:"JAX",udAdp:86.5,dkAdp:86.7,div:"AFC-S",proj:307.4},
+  {n:"Rico Dowdle",pos:"RB",tm:"PIT",udAdp:87.4,dkAdp:91.1,div:"AFC-N",proj:138.6},
+  {n:"Quentin Johnston",pos:"WR",tm:"LAC",udAdp:88.3,dkAdp:88.3,dkEst:1,div:"AFC-W",proj:134.9},
+  {n:"Chris Godwin",pos:"WR",tm:"TB",udAdp:89.0,dkAdp:87.8,div:"NFC-S",proj:139.6},
+  {n:"Patrick Mahomes",pos:"QB",tm:"KC",udAdp:90.1,dkAdp:92.6,div:"AFC-W",proj:280.6},
+  {n:"Kyle Monangai",pos:"RB",tm:"CHI",udAdp:91.6,dkAdp:91.6,dkEst:1,div:"NFC-N",proj:145.1},
+  {n:"Michael Wilson",pos:"WR",tm:"ARI",udAdp:92.2,dkAdp:81.8,div:"NFC-W",proj:139.9},
+  {n:"Blake Corum",pos:"RB",tm:"LAR",udAdp:93.7,dkAdp:93.7,dkEst:1,div:"NFC-W",proj:129.8},
+  {n:"Jaxson Dart",pos:"QB",tm:"NYG",udAdp:95.8,dkAdp:96.9,div:"NFC-E",proj:304.5},
+  {n:"Josh Downs",pos:"WR",tm:"IND",udAdp:95.8,dkAdp:107.2,div:"AFC-S",proj:132.1},
+  {n:"Harold Fannin",pos:"TE",tm:"CLE",udAdp:96.4,dkAdp:84.1,div:"AFC-N",proj:148.1},
+  {n:"Sam LaPorta",pos:"TE",tm:"DET",udAdp:97.4,dkAdp:91.5,div:"NFC-N",proj:144.1},
+  {n:"Brock Purdy",pos:"QB",tm:"SF",udAdp:98.0,dkAdp:98.0,dkEst:1,div:"NFC-W",proj:297.7},
+  {n:"Jakobi Meyers",pos:"WR",tm:"JAX",udAdp:99.7,dkAdp:99.7,dkEst:1,div:"AFC-S",proj:137.3},
+  {n:"Ricky Pearsall",pos:"WR",tm:"SF",udAdp:100.9,dkAdp:100.9,dkEst:1,div:"NFC-W",proj:139.7},
+  {n:"Xavier Worthy",pos:"WR",tm:"KC",udAdp:101.2,dkAdp:112.0,div:"AFC-W",proj:136.0},
+  {n:"Matthew Stafford",pos:"QB",tm:"LAR",udAdp:102.7,dkAdp:89.3,div:"NFC-W",proj:280.2},
+  {n:"J.K. Dobbins",pos:"RB",tm:"DEN",udAdp:104.0,dkAdp:104.0,dkEst:1,div:"AFC-W",proj:147.2},
+  {n:"Bo Nix",pos:"QB",tm:"DEN",udAdp:104.1,dkAdp:104.1,dkEst:1,div:"AFC-W",proj:299.7},
+  {n:"Michael Pittman Jr.",pos:"WR",tm:"PIT",udAdp:104.4,dkAdp:104.4,dkEst:1,div:"AFC-N",proj:133.5},
+  {n:"Kyle Pitts",pos:"TE",tm:"ATL",udAdp:105.5,dkAdp:92.5,div:"NFC-S",proj:138.6},
+  {n:"Kenneth Gainwell",pos:"RB",tm:"TB",udAdp:105.8,dkAdp:105.8,dkEst:1,div:"NFC-S",proj:118.2},
+  {n:"Jared Goff",pos:"QB",tm:"DET",udAdp:107.1,dkAdp:107.1,dkEst:1,div:"NFC-N",proj:285.5},
+  {n:"Kyler Murray",pos:"QB",tm:"MIN",udAdp:108.2,dkAdp:108.2,dkEst:1,div:"NFC-N",proj:269.2},
+  {n:"Matthew Golden",pos:"WR",tm:"GB",udAdp:109.4,dkAdp:115.3,div:"NFC-N",proj:132.3},
+  {n:"Jonathon Brooks",pos:"RB",tm:"CAR",udAdp:109.5,dkAdp:109.5,dkEst:1,div:"NFC-S",proj:24.3},
+  {n:"Jordan Love",pos:"QB",tm:"GB",udAdp:110.3,dkAdp:110.3,dkEst:1,div:"NFC-N",proj:286.5},
+  {n:"Romeo Doubs",pos:"WR",tm:"NE",udAdp:114.6,dkAdp:114.6,dkEst:1,div:"AFC-E",proj:138.7},
+  {n:"KC Concepcion",pos:"WR",tm:"CLE",udAdp:116.0,dkAdp:116.0,dkEst:1,div:"AFC-N",proj:124.2},
+  {n:"Tyler Shough",pos:"QB",tm:"NO",udAdp:116.7,dkAdp:116.7,dkEst:1,div:"NFC-S",proj:264.0},
+  {n:"Wan'Dale Robinson",pos:"WR",tm:"TEN",udAdp:116.9,dkAdp:116.9,dkEst:1,div:"AFC-S",proj:127.0},
+  {n:"George Kittle",pos:"TE",tm:"SF",udAdp:117.5,dkAdp:106.0,div:"NFC-W",proj:123.4},
+  {n:"Chris Rodriguez",pos:"RB",tm:"JAX",udAdp:117.5,dkAdp:117.5,dkEst:1,div:"AFC-S",proj:127.0},
+  {n:"Baker Mayfield",pos:"QB",tm:"TB",udAdp:117.7,dkAdp:117.7,dkEst:1,div:"NFC-S",proj:280.9},
+  {n:"Rachaad White",pos:"RB",tm:"WAS",udAdp:119.5,dkAdp:129.8,div:"NFC-E",proj:108.7},
+  {n:"Jacory Croskey-Merritt",pos:"RB",tm:"WAS",udAdp:120.0,dkAdp:120.0,dkEst:1,div:"NFC-E",proj:120.4},
+  {n:"Travis Kelce",pos:"TE",tm:"KC",udAdp:121.2,dkAdp:116.6,div:"AFC-W",proj:131.5},
+  {n:"Aaron Jones",pos:"RB",tm:"MIN",udAdp:121.5,dkAdp:121.5,dkEst:1,div:"NFC-N",proj:138.8},
+  {n:"Jayden Higgins",pos:"WR",tm:"HOU",udAdp:124.6,dkAdp:124.6,dkEst:1,div:"AFC-S",proj:135.2},
+  {n:"Jordan Mason",pos:"RB",tm:"MIN",udAdp:124.6,dkAdp:124.6,dkEst:1,div:"NFC-N",proj:120.0},
+  {n:"Jake Ferguson",pos:"TE",tm:"DAL",udAdp:126.5,dkAdp:126.5,dkEst:1,div:"NFC-E",proj:126.8},
+  {n:"Mark Andrews",pos:"TE",tm:"BAL",udAdp:127.2,dkAdp:123.5,dkEst:1,div:"AFC-N",proj:127.8},
+  {n:"Khalil Shakir",pos:"WR",tm:"BUF",udAdp:128.3,dkAdp:128.3,dkEst:1,div:"AFC-E",proj:132.0},
+  {n:"Dalton Kincaid",pos:"TE",tm:"BUF",udAdp:129.6,dkAdp:111.8,div:"AFC-E",proj:125.6},
+  {n:"Tyrone Tracy",pos:"RB",tm:"NYG",udAdp:130.7,dkAdp:130.7,dkEst:1,div:"NFC-E",proj:102.8},
+  {n:"Isaiah Likely",pos:"TE",tm:"NYG",udAdp:131.4,dkAdp:123.8,div:"NFC-E",proj:121.7},
+  {n:"Malik Willis",pos:"QB",tm:"MIA",udAdp:131.4,dkAdp:131.4,dkEst:1,div:"AFC-E",proj:256.8},
+  {n:"Stefon Diggs",pos:"WR",tm:"FA",udAdp:132.9,dkAdp:132.9,dkEst:1,div:"FA",proj:108.0},
+  {n:"Jalen Coker",pos:"WR",tm:"CAR",udAdp:134.8,dkAdp:134.8,dkEst:1,div:"NFC-S",proj:133.9},
+  {n:"Dallas Goedert",pos:"TE",tm:"PHI",udAdp:135.6,dkAdp:125.6,div:"NFC-E",proj:115.5},
+  {n:"Cam Ward",pos:"QB",tm:"TEN",udAdp:136.3,dkAdp:136.3,dkEst:1,div:"AFC-S",proj:233.8},
+  {n:"Keaton Mitchell",pos:"RB",tm:"LAC",udAdp:137.0,dkAdp:137.0,dkEst:1,div:"AFC-W",proj:89.9},
+  {n:"Travis Hunter",pos:"WR",tm:"JAX",udAdp:137.8,dkAdp:137.8,dkEst:1,div:"AFC-S",proj:79.1},
+  {n:"Rashid Shaheed",pos:"WR",tm:"SEA",udAdp:140.1,dkAdp:140.1,dkEst:1,div:"NFC-W",proj:113.2},
+  {n:"Sam Darnold",pos:"QB",tm:"SEA",udAdp:140.6,dkAdp:140.6,dkEst:1,div:"NFC-W",proj:266.7},
+  {n:"Omar Cooper",pos:"WR",tm:"NYJ",udAdp:141.4,dkAdp:141.4,dkEst:1,div:"AFC-E",proj:129.0},
+  {n:"C.J. Stroud",pos:"QB",tm:"HOU",udAdp:142.4,dkAdp:142.4,dkEst:1,div:"AFC-S",proj:238.2},
+  {n:"Oronde Gadsden",pos:"TE",tm:"LAC",udAdp:143.4,dkAdp:143.4,dkEst:1,div:"AFC-W",proj:122.1},
+  {n:"Woody Marks",pos:"RB",tm:"HOU",udAdp:144.2,dkAdp:144.2,dkEst:1,div:"AFC-S",proj:76.3},
+  {n:"Daniel Jones",pos:"QB",tm:"IND",udAdp:144.6,dkAdp:144.6,dkEst:1,div:"AFC-S",proj:235.5},
+  {n:"Jauan Jennings",pos:"WR",tm:"MIN",udAdp:147.4,dkAdp:147.4,dkEst:1,div:"NFC-N",proj:110.0},
+  {n:"Isiah Pacheco",pos:"RB",tm:"DET",udAdp:147.4,dkAdp:147.4,dkEst:1,div:"NFC-N",proj:50.6},
+  {n:"Jalen McMillan",pos:"WR",tm:"TB",udAdp:147.8,dkAdp:147.8,dkEst:1,div:"NFC-S",proj:98.4},
+  {n:"Hunter Henry",pos:"TE",tm:"NE",udAdp:149.4,dkAdp:149.4,dkEst:1,div:"AFC-E",proj:119.9},
+  {n:"Chig Okonkwo",pos:"TE",tm:"WAS",udAdp:150.1,dkAdp:150.1,dkEst:1,div:"NFC-E",proj:95.9},
+  {n:"Jonah Coleman",pos:"RB",tm:"DEN",udAdp:150.1,dkAdp:150.1,dkEst:1,div:"AFC-W",proj:121.0},
+  {n:"Jalen Nailor",pos:"WR",tm:"LV",udAdp:152.2,dkAdp:152.2,dkEst:1,div:"AFC-W",proj:116.1},
+  {n:"Kenyon Sadiq",pos:"TE",tm:"NYJ",udAdp:154.2,dkAdp:154.2,dkEst:1,div:"AFC-E",proj:125.0},
+  {n:"Bryce Young",pos:"QB",tm:"CAR",udAdp:154.8,dkAdp:154.8,dkEst:1,div:"NFC-S",proj:229.3},
+  {n:"Brenton Strange",pos:"TE",tm:"JAX",udAdp:155.2,dkAdp:155.2,dkEst:1,div:"AFC-S",proj:124.8},
+  {n:"Tre Tucker",pos:"WR",tm:"LV",udAdp:155.6,dkAdp:163.5,div:"AFC-W",proj:91.8},
+  {n:"Tyler Allgeier",pos:"RB",tm:"ARI",udAdp:157.0,dkAdp:157.0,dkEst:1,div:"NFC-W",proj:69.8},
+  {n:"Juwan Johnson",pos:"TE",tm:"NO",udAdp:157.0,dkAdp:157.0,dkEst:1,div:"NFC-S",proj:109.6},
+  {n:"Antonio Williams",pos:"WR",tm:"WAS",udAdp:159.8,dkAdp:159.8,dkEst:1,div:"NFC-E",proj:79.5},
+  {n:"Denzel Boston",pos:"WR",tm:"CLE",udAdp:160.5,dkAdp:160.5,dkEst:1,div:"AFC-N",proj:119.0},
+  {n:"Tyjae Spears",pos:"RB",tm:"TEN",udAdp:161.6,dkAdp:161.6,dkEst:1,div:"AFC-S",proj:99.1},
+  {n:"T.J. Hockenson",pos:"TE",tm:"MIN",udAdp:163.3,dkAdp:163.3,dkEst:1,div:"NFC-N",proj:103.0},
+  {n:"Deebo Samuel",pos:"WR",tm:"FA",udAdp:165.1,dkAdp:177.6,div:"FA",proj:94.0},
+  {n:"Zach Charbonnet",pos:"RB",tm:"SEA",udAdp:166.0,dkAdp:141.8,div:"NFC-W",proj:70.8},
+  {n:"De'Zhaun Stribling",pos:"WR",tm:"SF",udAdp:166.6,dkAdp:166.6,dkEst:1,div:"NFC-W",proj:93.1},
+  {n:"Brian Robinson",pos:"RB",tm:"ATL",udAdp:167.4,dkAdp:167.4,dkEst:1,div:"NFC-S",proj:63.4},
+  {n:"Fernando Mendoza",pos:"QB",tm:"LV",udAdp:168.5,dkAdp:168.5,dkEst:1,div:"AFC-W",proj:235.0},
+  {n:"Dylan Sampson",pos:"RB",tm:"CLE",udAdp:169.6,dkAdp:169.6,dkEst:1,div:"AFC-N",proj:79.2},
+  {n:"Dalton Schultz",pos:"TE",tm:"HOU",udAdp:170.0,dkAdp:170.0,dkEst:1,div:"AFC-S",proj:106.0},
+  {n:"Isaac TeSlaa",pos:"WR",tm:"DET",udAdp:170.4,dkAdp:170.4,dkEst:1,div:"NFC-N",proj:88.9},
+  {n:"Ryan Flournoy",pos:"WR",tm:"DAL",udAdp:170.6,dkAdp:181.7,div:"NFC-E",proj:94.0},
+  {n:"Aaron Rodgers",pos:"QB",tm:"PIT",udAdp:172.2,dkAdp:172.2,dkEst:1,div:"AFC-N",proj:120.0},
+  {n:"Tank Bigsby",pos:"RB",tm:"PHI",udAdp:173.4,dkAdp:173.4,dkEst:1,div:"NFC-E",proj:55.2},
+  {n:"Sean Tucker",pos:"RB",tm:"TB",udAdp:173.6,dkAdp:173.6,dkEst:1,div:"NFC-S",proj:50.5},
+  {n:"Tre' Harris",pos:"WR",tm:"LAC",udAdp:174.6,dkAdp:198.3,div:"AFC-W",proj:93.4},
+  {n:"AJ Barner",pos:"TE",tm:"SEA",udAdp:175.1,dkAdp:175.1,dkEst:1,div:"NFC-W",proj:113.4},
+  {n:"Gunnar Helm",pos:"TE",tm:"TEN",udAdp:178.4,dkAdp:178.4,dkEst:1,div:"AFC-S",proj:94.3},
+  {n:"Germie Bernard",pos:"WR",tm:"PIT",udAdp:179.7,dkAdp:179.7,dkEst:1,div:"AFC-N",proj:80.0},
+  {n:"Geno Smith",pos:"QB",tm:"NYJ",udAdp:180.2,dkAdp:180.2,dkEst:1,div:"AFC-E",proj:230.5},
+  {n:"Nicholas Singleton",pos:"RB",tm:"TEN",udAdp:182.0,dkAdp:182.0,dkEst:1,div:"AFC-S",proj:81.0},
+  {n:"Ted Hurst",pos:"WR",tm:"TB",udAdp:183.0,dkAdp:183.0,dkEst:1,div:"NFC-S",proj:78.0},
+  {n:"Emmett Johnson",pos:"RB",tm:"KC",udAdp:184.2,dkAdp:184.2,dkEst:1,div:"AFC-W",proj:61.0},
+  {n:"Cade Otton",pos:"TE",tm:"TB",udAdp:184.8,dkAdp:184.8,dkEst:1,div:"NFC-S",proj:100.0},
+  {n:"Jerry Jeudy",pos:"WR",tm:"CLE",udAdp:185.0,dkAdp:185.0,dkEst:1,div:"AFC-N",proj:98.1},
+  {n:"Alvin Kamara",pos:"RB",tm:"NO",udAdp:186.0,dkAdp:186.0,dkEst:1,div:"NFC-S",proj:42.9},
+  {n:"Calvin Ridley",pos:"WR",tm:"TEN",udAdp:186.8,dkAdp:186.8,dkEst:1,div:"AFC-S",proj:63.8},
+  {n:"Zachariah Branch",pos:"WR",tm:"ATL",udAdp:186.9,dkAdp:186.9,dkEst:1,div:"NFC-S",proj:82.1},
+  {n:"Brandon Aiyuk",pos:"WR",tm:"SF",udAdp:189.1,dkAdp:189.1,dkEst:1,div:"NFC-W",proj:106.3},
+  {n:"Tank Dell",pos:"WR",tm:"HOU",udAdp:189.6,dkAdp:189.6,dkEst:1,div:"AFC-S",proj:80.8},
+  {n:"Pat Freiermuth",pos:"TE",tm:"PIT",udAdp:190.0,dkAdp:190.0,dkEst:1,div:"AFC-N",proj:102.9},
+  {n:"Eli Stowers",pos:"TE",tm:"PHI",udAdp:193.3,dkAdp:193.3,dkEst:1,div:"NFC-E",proj:105.0},
+  {n:"Malik Washington",pos:"WR",tm:"MIA",udAdp:194.1,dkAdp:194.1,dkEst:1,div:"AFC-E",proj:82.2},
+  {n:"Greg Dulcich",pos:"TE",tm:"MIA",udAdp:194.2,dkAdp:194.2,dkEst:1,div:"AFC-E",proj:50.5},
+  {n:"Darnell Mooney",pos:"WR",tm:"NYG",udAdp:194.7,dkAdp:194.7,dkEst:1,div:"NFC-E",proj:49.1},
+  {n:"Mike Washington",pos:"RB",tm:"LV",udAdp:195.8,dkAdp:195.8,dkEst:1,div:"AFC-W",proj:121.0},
+  {n:"Emanuel Wilson",pos:"RB",tm:"SEA",udAdp:195.9,dkAdp:195.9,dkEst:1,div:"NFC-W",proj:51.0},
+  {n:"Jacoby Brissett",pos:"QB",tm:"ARI",udAdp:198.7,dkAdp:164.5,div:"NFC-W",proj:166.0},
+  {n:"Adonai Mitchell",pos:"WR",tm:"NYJ",udAdp:198.9,dkAdp:198.9,dkEst:1,div:"AFC-E",proj:52.2},
+  {n:"Kaytron Allen",pos:"RB",tm:"WAS",udAdp:198.9,dkAdp:198.9,dkEst:1,div:"NFC-E",proj:50.0},
+  {n:"Dontayvion Wicks",pos:"WR",tm:"PHI",udAdp:200.5,dkAdp:200.5,dkEst:1,div:"NFC-E",proj:57.4},
+  {n:"Ray Davis",pos:"RB",tm:"BUF",udAdp:202.2,dkAdp:202.2,dkEst:1,div:"AFC-E",proj:53.5},
+  {n:"David Njoku",pos:"TE",tm:"LAC",udAdp:203.2,dkAdp:203.2,dkEst:1,div:"AFC-W",proj:75.0},
+  {n:"Terrance Ferguson",pos:"TE",tm:"LAR",udAdp:204.7,dkAdp:204.7,dkEst:1,div:"NFC-W",proj:66.4},
+  {n:"Chris Bell",pos:"WR",tm:"MIA",udAdp:205.6,dkAdp:205.6,dkEst:1,div:"AFC-E",proj:74.7},
+  {n:"Cooper Kupp",pos:"WR",tm:"SEA",udAdp:206.9,dkAdp:206.9,dkEst:1,div:"NFC-W",proj:70.4},
+  {n:"Braelon Allen",pos:"RB",tm:"NYJ",udAdp:207.6,dkAdp:207.6,dkEst:1,div:"AFC-E",proj:48.8},
+  {n:"MarShawn Lloyd",pos:"RB",tm:"GB",udAdp:207.6,dkAdp:207.6,dkEst:1,div:"NFC-N",proj:22.1},
+  {n:"Tua Tagovailoa",pos:"QB",tm:"ATL",udAdp:207.7,dkAdp:207.7,dkEst:1,div:"NFC-S",proj:137.9},
+  {n:"Mike Gesicki",pos:"TE",tm:"CIN",udAdp:208.3,dkAdp:208.3,dkEst:1,div:"AFC-N",proj:83.9},
+  {n:"Malachi Fields",pos:"WR",tm:"NYG",udAdp:209.7,dkAdp:209.7,dkEst:1,div:"NFC-E",proj:67.6},
+  {n:"Jordan James",pos:"RB",tm:"SF",udAdp:210.4,dkAdp:210.4,dkEst:1,div:"NFC-W",proj:54.2},
+  {n:"Elijah Sarratt",pos:"WR",tm:"BAL",udAdp:210.4,dkAdp:210.4,dkEst:1,div:"AFC-N",proj:80.0},
+  {n:"Tyreek Hill",pos:"WR",tm:"FA",udAdp:210.8,dkAdp:168.7,div:"FA",proj:88.0},
+  {n:"Troy Franklin",pos:"WR",tm:"DEN",udAdp:210.9,dkAdp:210.9,dkEst:1,div:"AFC-W",proj:70.6},
+  {n:"Kayshon Boutte",pos:"WR",tm:"NE",udAdp:211.8,dkAdp:211.8,dkEst:1,div:"AFC-E",proj:79.1},
+  {n:"Chris Brazzell",pos:"WR",tm:"CAR",udAdp:211.9,dkAdp:211.9,dkEst:1,div:"NFC-S",proj:70.0},
+  {n:"Deshaun Watson",pos:"QB",tm:"CLE",udAdp:212.7,dkAdp:212.7,dkEst:1,div:"AFC-N",proj:56.9},
+  {n:"Tory Horton",pos:"WR",tm:"SEA",udAdp:212.7,dkAdp:212.7,dkEst:1,div:"NFC-W",proj:88.8},
+  {n:"Kimani Vidal",pos:"RB",tm:"LAC",udAdp:213.1,dkAdp:213.1,dkEst:1,div:"AFC-W",proj:32.2},
+  {n:"Pat Bryant",pos:"WR",tm:"DEN",udAdp:213.2,dkAdp:213.2,dkEst:1,div:"AFC-W",proj:78.9},
+  {n:"Christian Kirk",pos:"WR",tm:"SF",udAdp:213.6,dkAdp:213.6,dkEst:1,div:"NFC-W",proj:60.7},
+  {n:"Jake Tonges",pos:"TE",tm:"SF",udAdp:213.7,dkAdp:213.7,dkEst:1,div:"NFC-W",proj:55.8},
+  {n:"Kaelon Black",pos:"RB",tm:"SF",udAdp:213.8,dkAdp:213.8,dkEst:1,div:"NFC-W",proj:39.3},
+  {n:"Keon Coleman",pos:"WR",tm:"BUF",udAdp:213.9,dkAdp:213.9,dkEst:1,div:"AFC-E",proj:31.8},
+  {n:"Justice Hill",pos:"RB",tm:"BAL",udAdp:213.9,dkAdp:213.9,dkEst:1,div:"AFC-N",proj:45.0},
+  {n:"Colby Parkinson",pos:"TE",tm:"LAR",udAdp:213.9,dkAdp:213.9,dkEst:1,div:"NFC-W",proj:67.2},
+  {n:"James Conner",pos:"RB",tm:"ARI",udAdp:214.0,dkAdp:214.0,dkEst:1,div:"NFC-W",proj:55.8},
+  {n:"Rashod Bateman",pos:"WR",tm:"BAL",udAdp:214.0,dkAdp:214.0,dkEst:1,div:"AFC-N",proj:70.1},
+  {n:"Michael Penix",pos:"QB",tm:"ATL",udAdp:214.2,dkAdp:214.2,dkEst:1,div:"NFC-S",proj:110.4},
+  {n:"Darnell Washington",pos:"TE",tm:"PIT",udAdp:214.2,dkAdp:214.2,dkEst:1,div:"AFC-N",proj:71.4},
+  {n:"Tyquan Thornton",pos:"WR",tm:"KC",udAdp:214.4,dkAdp:214.4,dkEst:1,div:"AFC-W",proj:52.6},
+  {n:"Ja'Kobi Lane",pos:"WR",tm:"BAL",udAdp:214.6,dkAdp:214.6,dkEst:1,div:"AFC-N",proj:74.1},
+  {n:"Demond Claiborne",pos:"RB",tm:"MIN",udAdp:214.8,dkAdp:214.8,dkEst:1,div:"NFC-N",proj:27.8},
+  {n:"Shedeur Sanders",pos:"QB",tm:"CLE",udAdp:214.8,dkAdp:214.8,dkEst:1,div:"AFC-N",proj:57.2},
+  {n:"Jack Bech",pos:"WR",tm:"LV",udAdp:214.9,dkAdp:214.9,dkEst:1,div:"AFC-W",proj:71.7},
+  {n:"Skyler Bell",pos:"WR",tm:"BUF",udAdp:214.9,dkAdp:214.9,dkEst:1,div:"AFC-E",proj:76.2},
+  {n:"Chris Brooks",pos:"RB",tm:"GB",udAdp:214.9,dkAdp:214.9,dkEst:1,div:"NFC-N",proj:53.6},
+  {n:"Jaydon Blue",pos:"RB",tm:"DAL",udAdp:214.9,dkAdp:214.9,dkEst:1,div:"NFC-E",proj:41.4},
+  {n:"Jaylin Noel",pos:"WR",tm:"HOU",udAdp:214.9,dkAdp:214.9,dkEst:1,div:"AFC-S",proj:67.4},
+  {n:"Evan Engram",pos:"TE",tm:"DEN",udAdp:215.0,dkAdp:215.0,dkEst:1,div:"AFC-W",proj:55.2},
+  {n:"Malik Davis",pos:"RB",tm:"DAL",udAdp:215.1,dkAdp:215.1,dkEst:1,div:"NFC-E",proj:27.4},
+  {n:"Andrei Iosivas",pos:"WR",tm:"CIN",udAdp:215.3,dkAdp:215.3,dkEst:1,div:"AFC-N",proj:75.3},
+  {n:"Michael Mayer",pos:"TE",tm:"LV",udAdp:215.3,dkAdp:215.3,dkEst:1,div:"AFC-W",proj:59.1},
+  {n:"Carson Beck",pos:"QB",tm:"ARI",udAdp:215.4,dkAdp:215.4,dkEst:1,div:"NFC-W",proj:56.9},
+  {n:"Samaje Perine",pos:"RB",tm:"CIN",udAdp:215.4,dkAdp:215.4,dkEst:1,div:"AFC-N",proj:29.2},
+  {n:"Chimere Dike",pos:"WR",tm:"TEN",udAdp:215.4,dkAdp:215.4,dkEst:1,div:"AFC-S",proj:72.4},
+  {n:"Devaughn Vele",pos:"WR",tm:"NO",udAdp:215.5,dkAdp:215.5,dkEst:1,div:"NFC-S",proj:74.5},
+  {n:"Theo Johnson",pos:"TE",tm:"NYG",udAdp:215.5,dkAdp:215.5,dkEst:1,div:"NFC-E",proj:61.5},
+  {n:"Kirk Cousins",pos:"QB",tm:"LV",udAdp:215.5,dkAdp:215.5,dkEst:1,div:"AFC-W",proj:43.2},
+  {n:"Zavion Thomas",pos:"WR",tm:"CHI",udAdp:215.6,dkAdp:215.6,dkEst:1,div:"NFC-N",proj:47.2},
+  {n:"George Holani",pos:"RB",tm:"SEA",udAdp:215.7,dkAdp:215.7,dkEst:1,div:"NFC-W",proj:23.2},
+  {n:"Caleb Douglas",pos:"WR",tm:"MIA",udAdp:215.7,dkAdp:215.7,dkEst:1,div:"AFC-E",proj:26.5},
+  {n:"Dawson Knox",pos:"TE",tm:"BUF",udAdp:215.7,dkAdp:215.7,dkEst:1,div:"AFC-E",proj:62.4},
+  {n:"Darius Slayton",pos:"WR",tm:"NYG",udAdp:215.7,dkAdp:215.7,dkEst:1,div:"NFC-E",proj:72.6},
+  {n:"Jaylen Wright",pos:"RB",tm:"MIA",udAdp:215.7,dkAdp:215.7,dkEst:1,div:"AFC-E",proj:41.1},
+  {n:"DJ Giddens",pos:"RB",tm:"IND",udAdp:215.8,dkAdp:215.8,dkEst:1,div:"AFC-S",proj:27.0},
+  {n:"Elijah Arroyo",pos:"TE",tm:"SEA",udAdp:215.8,dkAdp:215.8,dkEst:1,div:"NFC-W",proj:57.7},
+  {n:"Elic Ayomanor",pos:"WR",tm:"TEN",udAdp:215.8,dkAdp:215.8,dkEst:1,div:"AFC-S",proj:46.7},
+  {n:"Ollie Gordon",pos:"RB",tm:"MIA",udAdp:215.8,dkAdp:215.8,dkEst:1,div:"AFC-E",proj:21.7},
+  {n:"Ty Johnson",pos:"RB",tm:"BUF",udAdp:215.8,dkAdp:215.8,dkEst:1,div:"AFC-E",proj:47.3},
+  {n:"Hollywood Brown",pos:"WR",tm:"PHI",udAdp:215.8,dkAdp:215.8,dkEst:1,div:"NFC-E",proj:55.0},
+  {n:"Cole Kmet",pos:"TE",tm:"CHI",udAdp:215.8,dkAdp:215.8,dkEst:1,div:"NFC-N",proj:54.1},
+  {n:"Jahan Dotson",pos:"WR",tm:"ATL",udAdp:215.8,dkAdp:215.8,dkEst:1,div:"NFC-S",proj:52.4},
+  {n:"LeQuint Allen",pos:"RB",tm:"JAX",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-S",proj:47.2},
+  {n:"Mason Taylor",pos:"TE",tm:"NYJ",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-E",proj:60.8},
+  {n:"J.J. McCarthy",pos:"QB",tm:"MIN",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"NFC-N",proj:19.6},
+  {n:"Justin Fields",pos:"QB",tm:"KC",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-W",proj:36.7},
+  {n:"Kyle Williams",pos:"WR",tm:"NE",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-E",proj:26.2},
+  {n:"Marvin Mims Jr.",pos:"WR",tm:"DEN",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-W",proj:58.4},
+  {n:"Tez Johnson",pos:"WR",tm:"TB",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"NFC-S",proj:31.4},
+  {n:"Kaleb Johnson",pos:"RB",tm:"PIT",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-N",proj:29.5},
+  {n:"Tahj Brooks",pos:"RB",tm:"CIN",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-N",proj:22.9},
+  {n:"Bryce Lance",pos:"WR",tm:"NO",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"NFC-S",proj:31.2},
+  {n:"Max Klare",pos:"TE",tm:"LAR",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"NFC-W",proj:66.7},
+  {n:"Anthony Richardson",pos:"QB",tm:"IND",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-S",proj:36.5},
+  {n:"Xavier Legette",pos:"WR",tm:"CAR",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"NFC-S",proj:32.1},
+  {n:"Jalen Royals",pos:"WR",tm:"KC",udAdp:215.9,dkAdp:215.9,dkEst:1,div:"AFC-W",proj:32.7},
+];
+
+const SCHED = {
+  //        bye  W15           W16           W17
+  ARI: { bye:14, w:[["NYJ","H"],["NO","A"],["LV","H"]] },
+  ATL: { bye:11, w:[["WAS","A"],["TB","H"],["NO","H"]] },
+  BAL: { bye:13, w:[["PIT","A"],["CLE","H"],["CIN","A"]] },
+  BUF: { bye:7,  w:[["CHI","H"],["DEN","A"],["MIA","A"]] },
+  CAR: { bye:5,  w:[["CIN","H"],["PIT","A"],["SEA","H"]] },
+  CHI: { bye:10, w:[["BUF","A"],["GB","H"],["DET","H"]] },
+  CIN: { bye:6,  w:[["CAR","A"],["IND","A"],["BAL","H"]] },
+  CLE: { bye:11, w:[["NYG","A"],["BAL","A"],["IND","H"]] },
+  DAL: { bye:null,w:[["SEA","A"],["PHI","A"],["NYG","H"]] },  // no bye found yet
+  DEN: { bye:null,w:[["MIA","A"],["BUF","H"],["KC","A"]] },
+  DET: { bye:null,w:[["MIN","A"],["NYG","H"],["CHI","A"]] },
+  GB:  { bye:11, w:[["MIA","A"],["CHI","A"],["DET","H"]] },
+  HOU: { bye:null,w:[["JAX","H"],["SEA","A"],["GB","A"]] },
+  IND: { bye:null,w:[["TEN","A"],["CIN","H"],["CLE","A"]] },
+  JAX: { bye:null,w:[["HOU","A"],["DAL","H"],["WAS","A"]] },
+  KC:  { bye:null,w:[["NE","H"],["SF","H"],["DEN","H"]] },
+  LAC: { bye:null,w:[["SF","H"],["MIA","H"],["KC","A"]] },
+  LAR: { bye:11, w:[["DAL","H"],["SEA","A"],["TB","A"]] },
+  LV:  { bye:null,w:[["DEN","H"],["TEN","H"],["ARI","A"]] },
+  MIA: { bye:null,w:[["GB","H"],["LAC","A"],["BUF","H"]] },
+  MIN: { bye:11, w:[["DET","H"],["WAS","H"],["NYJ","A"]] },
+  NE:  { bye:11, w:[["KC","A"],["NYJ","H"],["DEN","H"]] },
+  NO:  { bye:null,w:[["TB","A"],["ARI","H"],["ATL","A"]] },
+  NYG: { bye:null,w:[["CLE","H"],["DET","A"],["DAL","A"]] },
+  NYJ: { bye:null,w:[["ARI","A"],["NE","A"],["MIN","H"]] },
+  PHI: { bye:null,w:[["SEA","H"],["HOU","H"],["SF","A"]] },
+  PIT: { bye:9,  w:[["BAL","H"],["CAR","H"],["TEN","A"]] },
+  SEA: { bye:11, w:[["PHI","A"],["LAR","H"],["CAR","A"]] },
+  SF:  { bye:null,w:[["LAC","A"],["KC","A"],["PHI","H"]] },
+  TB:  { bye:null,w:[["NO","H"],["ATL","A"],["LAR","H"]] },
+  TEN: { bye:null,w:[["IND","H"],["LV","A"],["PIT","H"]] },
+  WAS: { bye:null,w:[["ATL","H"],["MIN","A"],["JAX","H"]] },
+};
+
+const SCHED_GRADE = {
+  // Grade: "elite" | "good" | "avg" | "tough" | "brutal"
+  ARI: "good",    // Jets + Saints + Raiders - soft
+  ATL: "avg",     // WAS + TB + NO
+  BAL: "tough",   // @ PIT + CLE + @ CIN - AFC North gauntlet
+  BUF: "avg",     // CHI + @ DEN + @ MIA
+  CAR: "avg",     // CIN + @ PIT + SEA
+  CHI: "elite",   // @ BUF + GB + DET - Bears/Vikings top-5 fantasy schedule W15-17
+  CIN: "tough",   // @ CAR + @ IND + BAL
+  CLE: "tough",   // @ NYG + @ BAL + IND
+  DAL: "tough",   // @ SEA + @ PHI + NYG
+  DEN: "good",    // @ MIA + BUF + @ KC
+  DET: "good",    // @ MIN + NYG + @ CHI
+  GB:  "avg",     // @ MIA + @ CHI + DET
+  HOU: "avg",     // JAX + @ SEA + @ GB
+  IND: "avg",     // @ TEN + CIN + @ CLE
+  JAX: "avg",     // @ HOU + DAL + @ WAS
+  KC:  "tough",   // NE + SF + DEN - tough pass rush opponents
+  LAC: "avg",     // SF + MIA + @ KC
+  LAR: "good",    // DAL + @ SEA + @ TB
+  LV:  "elite",   // DEN + TEN + @ ARI - very soft
+  MIA: "brutal",  // @ GB + LAC + BUF - three playoff teams
+  MIN: "elite",   // DET + WAS + @ NYJ - great matchups
+  NE:  "avg",     // @ KC + NYJ + DEN
+  NO:  "elite",   // @ TB + ARI + @ ATL - NFC South = soft
+  NYG: "tough",   // CLE + @ DET + @ DAL
+  NYJ: "avg",     // @ ARI + @ NE + MIN
+  PHI: "brutal",  // SEA + HOU + @ SF - hardest W15-17 per ESPN
+  PIT: "tough",   // BAL + CAR + @ TEN
+  SEA: "brutal",  // @ PHI + LAR + @ CAR - per ESPN hardest
+  SF:  "brutal",  // @ LAC + @ KC + PHI
+  TB:  "avg",     // @ NO + @ ATL + LAR
+  TEN: "good",    // IND + @ LV + @ PIT
+  WAS: "elite",   // ATL + @ MIN + JAX - per ESPN top W15-17
+};
+
+// ══════════════════════════════════════════════════════
+// CONSTANTS
+// ══════════════════════════════════════════════════════
+const POS_C = {
+  QB:{bg:"#e05c5c18",bd:"#e05c5c66",tx:"#e05c5c"},
+  RB:{bg:"#3ecf8e18",bd:"#3ecf8e66",tx:"#3ecf8e"},
+  WR:{bg:"#5b9cf618",bd:"#5b9cf666",tx:"#5b9cf6"},
+  TE:{bg:"#f4a84818",bd:"#f4a84866",tx:"#f4a848"},
+};
+const GRADE_C = { elite:"#3ecf8e", good:"#7dd98e", avg:"#8b96a8", tough:"#e08c5c", brutal:"#e05c5c" };
+const GRADE_PTS = { elite:3, good:1.5, avg:0, tough:-1.5, brutal:-3 };
+
+// ══════════════════════════════════════════════════════
+// WEEK 17 FINALS GAMES — environment model
+// Offense proxy: sum of team's top-6 projected points
+// ══════════════════════════════════════════════════════
+const TEAM_OFFENSE = (() => {
+  const m = {};
+  Object.keys(SCHED).forEach(tm => {
+    const top = PLAYERS.filter(p=>p.tm===tm && p.proj).sort((a,b)=>b.proj-a.proj).slice(0,6);
+    m[tm] = top.reduce((s,p)=>s+p.proj,0);
+  });
+  return m;
+})();
+const W17_GAMES = (() => {
+  const games = [];
+  Object.entries(SCHED).forEach(([tm, s]) => {
+    const [opp, ha] = s.w[2] || [];
+    if (ha === "H") games.push({ home: tm, away: opp, env: (TEAM_OFFENSE[tm]||0)+(TEAM_OFFENSE[opp]||0) });
+  });
+  games.sort((a,b)=>b.env-a.env);
+  games.forEach((g,i)=>{ g.grade = i<4?"A":i<8?"B":i<12?"C":"D"; g.rank = i+1; });
+  return games;
+})();
+const W17_LOOKUP = (() => {
+  const m = {};
+  W17_GAMES.forEach(g => { m[g.home]=g; m[g.away]=g; });
+  return m;
+})();
+const W17_GRADE_C = { A:"#3ecf8e", B:"#7dd98e", C:"#8b96a8", D:"#e08c5c" };
+
+// Winks 5yr construction thresholds
+const CONSTRUCTION = {
+  r6:  { WR:{min:3,max:4}, RB:{min:2,max:3}, QB:{min:0,max:1}, TE:{min:0,max:1} },
+  r10: { WR:{min:4,max:5}, RB:{min:4,max:5}, QB:{min:1,max:2}, TE:{min:0,max:1} },
+  r14: { WR:{min:5,max:7}, RB:{min:4,max:5}, QB:{min:1,max:3}, TE:{min:1,max:2} },
+  r18: { WR:{min:6,max:7}, RB:{min:5,max:6}, QB:{min:2,max:3}, TE:{min:2,max:3} },
+};
+// BBM6 winner build: 3 QB / 6 RB / 7 WR / 2 TE (Hero RB, QBs R9-15 all stacked)
+const TARGET_BUILD = { QB:[2,3], RB:[5,6], WR:[6,7], TE:[2,3] };
+
+function getCheckpoint(round) {
+  if (round <= 6) return { label:"R6", t: CONSTRUCTION.r6 };
+  if (round <= 10) return { label:"R10", t: CONSTRUCTION.r10 };
+  if (round <= 14) return { label:"R14", t: CONSTRUCTION.r14 };
+  return { label:"R18", t: CONSTRUCTION.r18 };
+}
+
+const myOverall = (round, slot, ts) => (round-1)*ts + (round%2===1 ? slot : ts+1-slot);
+
+// Pick-back odds: sigmoid on (player ADP - my next overall pick)
+function pickBackOdds(adp, nextOverall) {
+  const diff = adp - nextOverall;
+  return Math.round(100 / (1 + Math.exp(-diff / 4.5)));
+}
+
+// ══════════════════════════════════════════════════════
+// PICK SCORE ENGINE
+// ══════════════════════════════════════════════════════
+function computeScore(p, ctx) {
+  // ctx: { overall, nextOverall, round, counts, ownedByTeam, bringbackMap, portExp, totalPort }
+  let score = 50;
+  const why = [];
+  const icons = []; // correlation icons: positions I own on this player's team
+
+  // 1) ADP VALUE — biggest driver (platform-specific ADP)
+  const platAdp = (ctx.adpKey==="dkAdp" && p.dkAdp) ? p.dkAdp : p.udAdp;
+  const vd = ctx.overall - platAdp; // + = falling past ADP
+  const vPts = Math.max(-16, Math.min(16, vd * 1.1));
+  score += vPts;
+  if (vd >= 5) why.push({t:`Falling ${Math.round(vd)} past ADP`, pts:+vPts});
+  else if (vd <= -8) why.push({t:`Reach: ${Math.round(-vd)} ahead of ADP`, pts:vPts});
+
+  // 2) CORRELATION (the killer feature)
+  const mates = ctx.ownedByTeam[p.tm] || [];
+  let cPts = 0;
+  if (mates.length) {
+    mates.forEach(m => icons.push({kind:"mate", pos:m.pos}));
+    const hasQB = mates.some(m=>m.pos==="QB");
+    const hasPC = mates.some(m=>m.pos==="WR"||m.pos==="TE");
+    const hasRB = mates.some(m=>m.pos==="RB");
+    if ((p.pos==="WR"||p.pos==="TE") && hasQB) { cPts += 8; why.push({t:`Stacks with your ${p.tm} QB`, pts:+8}); }
+    else if ((p.pos==="WR"||p.pos==="TE") && hasPC) { cPts += 3; why.push({t:`Pairs with your ${p.tm} pass catcher`, pts:+3}); }
+    if (p.pos==="QB" && hasPC) { cPts += 7; why.push({t:`Completes stack w/ your ${p.tm} receiver(s)`, pts:+7}); }
+    if (p.pos==="QB" && hasRB) { cPts += 3; why.push({t:`Same-team RB correlation`, pts:+3}); }
+    if (p.pos==="RB" && hasQB) { cPts += 3; why.push({t:`RB + your ${p.tm} QB (rush TDs)`, pts:+3}); }
+  }
+  // Bring-back: this player's team faces any team I roster in W15-17
+  // QB-anchored bring-backs (game stack) score higher than skill-player-only anchors
+  const bbGames = ctx.bringbackMap[p.tm] || [];
+  if (bbGames.length && (p.pos==="WR"||p.pos==="RB"||p.pos==="TE"||p.pos==="QB")) {
+    const best = bbGames.some(g=>g.qbAnchor) ? 4 : 2;
+    cPts += best;
+    bbGames.forEach(g => {
+      icons.push({kind:"bb", tm:g.myTm, wk:g.wk});
+      why.push({t: g.qbAnchor
+        ? `Bring-back: faces your ${g.myTm} QB stack W${g.wk}`
+        : `Bring-back: faces your ${g.myTm} player(s) W${g.wk}`, pts: +best/bbGames.length});
+      // W17 = finals week. Extra weight scaled by game environment grade.
+      if (g.wk === 17) {
+        const game = W17_LOOKUP[p.tm];
+        const bonus = game?.grade==="A" ? 3 : game?.grade==="B" ? 2 : 1;
+        cPts += bonus;
+        why.push({t:"W17 FINALS game-stack" + (game ? ` (Grade ${game.grade} env, #${game.rank}/16)` : ""), pts:+bonus});
+      }
+    });
+  }
+  score += cPts;
+
+  // 3) ROSTER NEED (Winks construction)
+  const cp = getCheckpoint(ctx.round);
+  const th = cp.t[p.pos];
+  const cnt = ctx.counts[p.pos];
+  if (cnt < th.min) { score += 6; why.push({t:`Need ${p.pos} (${cnt}/${th.min} by ${cp.label})`, pts:+6}); }
+  else if (cnt >= th.max) { score -= 9; why.push({t:`${p.pos} full (${cnt}, max ${th.max} by ${cp.label})`, pts:-9}); }
+
+  // 4) PLAYOFF SCHEDULE W15-17
+  const g = SCHED_GRADE[p.tm];
+  if (g && GRADE_PTS[g]) {
+    score += GRADE_PTS[g];
+    if (g==="elite") why.push({t:`Elite W15-17 schedule`, pts:+3});
+    if (g==="brutal") why.push({t:`Brutal W15-17 schedule`, pts:-3});
+  }
+
+  // 5) PORTFOLIO EXPOSURE
+  const pct = ctx.totalPort > 0 ? Math.round(((ctx.portExp[p.n]||0)/ctx.totalPort)*100) : 0;
+  if (pct >= 50) { score -= 5; why.push({t:`${pct}% portfolio exposure`, pts:-5}); }
+  else if (pct >= 33) { score -= 2; why.push({t:`${pct}% exposure`, pts:-2}); }
+
+  // 6) Contextual nudges
+  if (p.pos==="QB" && ctx.counts.QB===0 && ctx.round>=6 && ctx.round<=8 && p.udAdp<=92) { score += 4; why.push({t:`QB window R6-8 — elite tier discount`, pts:+4}); }
+  if (p.pos==="QB" && ctx.counts.QB===2 && ctx.round>=15 && p.udAdp>=160) { score += 3; why.push({t:`QB3 round 15+ (3QB beat 2QB in 4/6 yrs)`, pts:+3}); }
+  if (p.pos==="TE" && ctx.counts.TE===1 && ctx.round<=8) { score -= 6; why.push({t:`Bully TE (2 early TE) below avg all yrs`, pts:-6}); }
+  if (p.udAdp >= 180 && p.udAdp <= 214 && ctx.round >= 13) { score += 2; why.push({t:`Late leverage zone (ADP 180-214)`, pts:+2}); }
+  if (p.udAdp >= 215) { score -= 4; why.push({t:`ADP 215+ rarely contributes`, pts:-4}); }
+  if (p.tm==="FA") { score -= 5; why.push({t:`Free agent — landing spot unknown`, pts:-5}); }
+
+  return { score: Math.round(score), why, icons, pct };
+}
+
+// ══════════════════════════════════════════════════════
+// CSS — speed-first, single column, large tap targets
+// ══════════════════════════════════════════════════════
+const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#080b10;color:#e2e8f0;font-family:'DM Sans',sans-serif;min-height:100vh;font-size:14px}
+button,input,select{font-family:'DM Sans',sans-serif}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:#0f1520}::-webkit-scrollbar-thumb{background:#2a3446;border-radius:2px}
+
+.app{max-width:1280px;margin:0 auto;padding:0 12px 60px}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:12px 0 10px;border-bottom:1px solid #151f2e;margin-bottom:12px;gap:8px;flex-wrap:wrap}
+.logo{font-size:17px;font-weight:700;letter-spacing:-.5px;color:#fff}
+.logo em{color:#3ecf8e;font-style:normal}
+.tabs{display:flex;gap:2px;background:#0d1420;border:1px solid #151f2e;border-radius:9px;padding:3px}
+.tab{padding:6px 16px;border-radius:7px;font-size:12.5px;font-weight:600;border:none;background:transparent;color:#3a4d63;cursor:pointer;white-space:nowrap}
+.tab.on{background:#162030;color:#e2e8f0}
+
+.inp{background:#0d1420;border:1px solid #151f2e;border-radius:7px;color:#e2e8f0;font-size:13px;padding:7px 10px;outline:none}
+.inp:focus{border-color:#3ecf8e44}
+.inp::placeholder{color:#2a3850}
+select.inp{appearance:none;padding-right:24px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%233a4d63' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;cursor:pointer}
+.chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:6px;font-size:11.5px;font-weight:600;border:1px solid;cursor:pointer;background:transparent;white-space:nowrap}
+.chip-on{border-color:#3ecf8e;color:#3ecf8e;background:#3ecf8e0e}
+.chip-off{border-color:#151f2e;color:#3a4d63}
+
+/* ── STATUS STRIP ── */
+.status-strip{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#0d1420;border:1px solid #151f2e;border-radius:10px;padding:8px 12px;margin-bottom:8px}
+.pick-now{font-size:13px;font-family:'DM Mono',monospace;font-weight:600;color:#3ecf8e;background:#3ecf8e0e;border:1px solid #3ecf8e33;padding:4px 10px;border-radius:7px}
+.pos-count{display:inline-flex;align-items:center;gap:3px;font-size:11px;font-family:'DM Mono',monospace;padding:3px 7px;border-radius:5px;border:1px solid}
+.build-chip{font-size:10.5px;font-family:'DM Mono',monospace;color:#8b96a8;margin-left:auto}
+
+/* ── BOARD ── */
+.board{display:flex;flex-direction:column;gap:3px}
+.brow{background:#0d1420;border:1px solid #151f2e;border-radius:9px;overflow:hidden;transition:border-color .1s}
+.brow:hover{border-color:#243045}
+.brow-main{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;min-height:48px}
+.score-chip{min-width:38px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;font-family:'DM Mono',monospace;flex-shrink:0;border:1px solid}
+.sc-hot{background:#3ecf8e1a;border-color:#3ecf8e66;color:#3ecf8e}
+.sc-good{background:#7dd98e12;border-color:#7dd98e44;color:#7dd98e}
+.sc-mid{background:#1a2333;border-color:#243045;color:#8b96a8}
+.sc-low{background:#e05c5c10;border-color:#e05c5c33;color:#e05c5c}
+.pb{display:inline-flex;align-items:center;justify-content:center;width:25px;height:17px;border-radius:4px;font-size:9.5px;font-weight:700;border:1px solid;font-family:'DM Mono',monospace;flex-shrink:0}
+.brow-name{font-size:13.5px;font-weight:600;color:#e2e8f0;line-height:1.15}
+.brow-sub{font-size:10px;font-family:'DM Mono',monospace;color:#3a4d63;margin-top:1px;display:flex;align-items:center;gap:5px}
+.corr-icons{display:inline-flex;gap:2px;margin-left:2px}
+.corr-icon{width:16px;height:13px;border-radius:3px;font-size:8px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;border:1px solid}
+.corr-bb{width:auto;padding:0 4px;background:#a78bfa18;border-color:#a78bfa66;color:#a78bfa;letter-spacing:.2px}
+.brow-right{margin-left:auto;display:flex;align-items:center;gap:7px;flex-shrink:0}
+.brow-adp{font-size:11.5px;font-family:'DM Mono',monospace;color:#5a6a80;text-align:right;line-height:1.2}
+.draft-btn{width:34px;height:34px;border-radius:8px;background:#3ecf8e1c;border:1px solid #3ecf8e55;color:#3ecf8e;font-size:19px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0}
+.draft-btn:active{background:#3ecf8e33}
+.gone-btn{width:30px;height:34px;border-radius:8px;background:transparent;border:1px solid #2a3446;color:#5a6a80;font-size:13px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.gone-btn:hover{border-color:#e05c5c55;color:#e05c5c}
+.gone-btn.undo{border-color:#3ecf8e44;color:#3ecf8e;font-size:15px}
+.sched-dot{width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0}
+
+/* expanded why */
+.brow-detail{padding:0 12px 10px;border-top:1px solid #151f2e;background:#0a111e}
+.why-row{display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px solid #10192a;color:#8b96a8}
+.why-row:last-child{border-bottom:none}
+.why-pts{font-family:'DM Mono',monospace;font-weight:600}
+.detail-meta{display:flex;gap:10px;flex-wrap:wrap;padding:8px 0 4px;font-size:11px;font-family:'DM Mono',monospace;color:#5a6a80}
+.pback{padding:2px 8px;border-radius:5px;font-weight:600;border:1px solid}
+
+/* roster drawer */
+.roster-bar{position:sticky;top:0;z-index:60;background:#080b10ee;backdrop-filter:blur(8px);padding:6px 0;margin-bottom:6px}
+.roster-pills{display:flex;gap:4px;overflow-x:auto;padding-bottom:2px}
+.rpill{display:inline-flex;align-items:center;gap:4px;background:#0d1420;border:1px solid #1c2840;border-radius:6px;padding:3px 7px;font-size:10.5px;white-space:nowrap;flex-shrink:0}
+.rpill .rx{color:#2a3850;cursor:pointer;font-size:12px;padding:0 1px}
+.rpill .rx:hover{color:#e05c5c}
+
+/* alert ticker */
+.ticker{font-size:11.5px;padding:7px 11px;border-radius:8px;margin-bottom:8px;border:1px solid;line-height:1.45}
+.tk-warn{background:#f4a84808;border-color:#f4a84830;color:#f4a848}
+.tk-alert{background:#e05c5c08;border-color:#e05c5c30;color:#e05c5c}
+.tk-ok{background:#3ecf8e08;border-color:#3ecf8e25;color:#3ecf8e}
+
+/* portfolio */
+.panel{background:#0d1420;border:1px solid #151f2e;border-radius:10px;padding:12px}
+.panel-t{font-size:9.5px;text-transform:uppercase;letter-spacing:.8px;color:#2a3850;font-family:'DM Mono',monospace;margin-bottom:10px}
+.port-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:680px){.port-grid{grid-template-columns:1fr}}
+.exp-row{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.exp-lbl{font-size:11.5px;color:#94a3b8;min-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.exp-bg{flex:1;height:4px;background:#151f2e;border-radius:2px;overflow:hidden}
+.exp-fill{height:100%;border-radius:2px}
+.exp-pct{font-size:10px;font-family:'DM Mono',monospace;color:#3a4d63;min-width:26px;text-align:right}
+.rmv-btn{background:none;border:none;color:#2a3850;font-size:13px;cursor:pointer;padding:0 2px}
+.rmv-btn:hover{color:#e05c5c}
+.empty{text-align:center;color:#2a3850;font-size:12px;padding:18px 0}
+
+/* stacks */
+.stk-card{background:#0d1420;border:1px solid #151f2e;border-radius:10px;padding:12px}
+.mono{font-family:'DM Mono',monospace}
+`;
+
+const pb = (pos, mini=false) => {
+  const c = POS_C[pos]||{bg:"#1a233322",bd:"#24304566",tx:"#8b96a8"};
+  if (mini) return <span className="corr-icon" style={{background:c.bg,borderColor:c.bd,color:c.tx}}>{pos}</span>;
+  return <span className="pb" style={{background:c.bg,borderColor:c.bd,color:c.tx}}>{pos}</span>;
+};
+
+// ══════════════════════════════════════════════════════
+// TEAM ANALYZER — post-draft report
+// ══════════════════════════════════════════════════════
+function analyzeRoster(picks, slot, teamSize, adpKey) {
+  const ps = picks.map(pk=>pk.player);
+  const counts = {QB:0,RB:0,WR:0,TE:0};
+  ps.forEach(p=>{ if(counts[p.pos]!==undefined) counts[p.pos]++; });
+
+  // 1. Construction vs Winks final thresholds
+  const T = TARGET_BUILD;
+  const constr = ["QB","RB","WR","TE"].map(pos=>{
+    const [mn,mx]=T[pos]; const n=counts[pos];
+    return { pos, n, mn, mx, ok: n>=mn && n<=mx, dir: n<mn?"under":n>mx?"over":"ok" };
+  });
+  const constrPass = constr.filter(x=>x.ok).length;
+
+  // 2. Stacks
+  const byTeam = {};
+  ps.forEach(p=>{ if(p.tm==="FA")return; (byTeam[p.tm]=byTeam[p.tm]||[]).push(p); });
+  const stacks = Object.entries(byTeam).filter(([,v])=>v.length>=2)
+    .map(([tm,v])=>({tm, players:v, hasQB:v.some(p=>p.pos==="QB"), size:v.length}))
+    .sort((a,b)=>b.size-a.size);
+  const qbStacks = stacks.filter(s=>s.hasQB);
+  const nakedQBs = ps.filter(p=>p.pos==="QB" && (byTeam[p.tm]||[]).length===1);
+
+  // 3. W17 finals coverage — games where I hold both sides
+  const gameStacked = W17_GAMES.filter(g => ps.some(p=>p.tm===g.home) && ps.some(p=>p.tm===g.away));
+  const w17Exposure = W17_GAMES.map(g => ({g, n: ps.filter(p=>p.tm===g.home||p.tm===g.away).length})).filter(x=>x.n>0).sort((a,b)=>b.n-a.n);
+
+  // 4. Bye clustering
+  const byes = {};
+  ps.forEach(p=>{ const b=SCHED[p.tm]?.bye; if(b) byes[b]=(byes[b]||0)+1; });
+  const worstBye = Object.entries(byes).sort((a,b)=>b[1]-a[1])[0];
+
+  // 5. Schedule mix (W15-17)
+  const schedMix = {elite:0,good:0,avg:0,tough:0,brutal:0};
+  ps.forEach(p=>{ const g=SCHED_GRADE[p.tm]; if(g) schedMix[g]++; });
+
+  // 6. Chalk / uniqueness
+  let value=0, chalk=0, reach=0;
+  picks.forEach((pk,i)=>{
+    const ov = myOverall(pk.round, slot, teamSize);
+    const adp = pk.player[adpKey]||pk.player.udAdp;
+    const d = ov - adp;
+    if (d >= 5) value++; else if (d <= -5) reach++; else chalk++;
+  });
+  const levZone = ps.filter(p=>p.udAdp>=180 && p.udAdp<=214).length;
+  const chalkPct = picks.length ? Math.round((chalk/picks.length)*100) : 0;
+
+  // 7. Verdict
+  const checks = [
+    { ok: constrPass===4, label:"Construction hits all 4 Winks targets", bad:`Construction misses: ${constr.filter(x=>!x.ok).map(x=>`${x.pos} ${x.n} (want ${x.mn}-${x.mx})`).join(", ")}` },
+    { ok: qbStacks.length>=1, label:`${qbStacks.length} QB stack${qbStacks.length!==1?"s":""} built`, bad:"No QB stacks — correlation is how tournaments are won" },
+    { ok: gameStacked.length>=1, label:`${gameStacked.length} W17 finals game${gameStacked.length!==1?"s":""} stacked both sides`, bad:"No W17 game stacked both sides — your finals ceiling is uncorrelated" },
+    { ok: !worstBye || worstBye[1]<=5, label:"Bye weeks distributed", bad:`${worstBye?.[1]} players on W${worstBye?.[0]} bye — regular-season hole` },
+    { ok: reach<=2, label:`Reaches controlled (${reach})`, bad:`${reach} reaches of 5+ spots — that bleeds points every year` },
+    { ok: chalkPct<=85 || levZone>=2, label:`Differentiation present (${levZone} leverage-zone, ${value} value falls)`, bad:`${chalkPct}% pure-chalk picks, ${levZone} leverage players — likely heavily duplicated in big fields` },
+  ];
+  const passN = checks.filter(x=>x.ok).length;
+  const grade = passN>=6?"A":passN>=5?"B+":passN>=4?"B":passN>=3?"C":"D";
+
+  return { counts, constr, stacks, qbStacks, nakedQBs, gameStacked, w17Exposure, byes, worstBye, schedMix, value, chalk, reach, levZone, chalkPct, checks, grade, total:picks.length };
+}
+
+function AnalysisModal({ picks, slot, teamSize, adpKey, onClose }) {
+  const a = useMemo(()=>analyzeRoster(picks, slot, teamSize, adpKey), [picks, slot, teamSize, adpKey]);
+  const gradeColor = a.grade==="A"?"#3ecf8e":a.grade.startsWith("B")?"#7dd98e":a.grade==="C"?"#f4a848":"#e05c5c";
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.85)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center",padding:12}} onClick={onClose}>
+      <div style={{background:"#0d1420",border:"1px solid #243045",borderRadius:14,padding:20,width:"100%",maxWidth:560,maxHeight:"90vh",overflowY:"auto"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <span style={{fontSize:16,fontWeight:700}}>📊 Roster Analysis <span className="mono" style={{fontSize:11,color:"#3a4d63"}}>({a.total}/18 picks)</span></span>
+          <span style={{display:"flex",gap:10,alignItems:"center"}}>
+            <span className="mono" style={{fontSize:24,fontWeight:700,color:gradeColor}}>{a.grade}</span>
+            <button onClick={onClose} style={{background:"none",border:"none",color:"#3a4d63",fontSize:18,cursor:"pointer"}}>✕</button>
+          </span>
+        </div>
+
+        {/* Verdict checklist */}
+        <div style={{marginBottom:14}}>
+          {a.checks.map((ch,i)=>(
+            <div key={i} style={{display:"flex",gap:8,padding:"6px 0",borderBottom:"1px solid #10192a",fontSize:12.5,alignItems:"flex-start"}}>
+              <span style={{color:ch.ok?"#3ecf8e":"#e05c5c",fontWeight:700,flexShrink:0}}>{ch.ok?"✓":"✗"}</span>
+              <span style={{color:ch.ok?"#94a3b8":"#e08c5c"}}>{ch.ok?ch.label:ch.bad}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Construction */}
+        <div className="panel-t">Construction (target {TARGET_BUILD.QB.join("-")}/{TARGET_BUILD.RB.join("-")}/{TARGET_BUILD.WR.join("-")}/{TARGET_BUILD.TE.join("-")})</div>
+        <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap"}}>
+          {a.constr.map(x=>(
+            <span key={x.pos} className="mono" style={{fontSize:12,padding:"4px 10px",borderRadius:6,border:`1px solid ${x.ok?"#3ecf8e44":"#e05c5c44"}`,color:x.ok?"#3ecf8e":"#e05c5c",background:x.ok?"#3ecf8e0a":"#e05c5c0a"}}>
+              {x.pos} {x.n} {x.ok?"✓":`(${x.mn}-${x.mx})`}
+            </span>
+          ))}
+        </div>
+
+        {/* Stacks */}
+        <div className="panel-t">Stacks</div>
+        <div style={{marginBottom:14}}>
+          {a.stacks.length===0 && <div style={{fontSize:12,color:"#e08c5c"}}>No multi-player team stacks.</div>}
+          {a.stacks.map(s=>(
+            <div key={s.tm} style={{display:"flex",gap:6,alignItems:"center",padding:"4px 0",fontSize:12,flexWrap:"wrap"}}>
+              <span style={{fontWeight:700,minWidth:34}} className="mono">{s.tm}</span>
+              {s.hasQB && <span className="mono" style={{fontSize:9,color:"#3ecf8e"}}>QB STACK</span>}
+              {s.players.map(p=><span key={p.n} style={{display:"inline-flex",gap:3,alignItems:"center"}}>{pb(p.pos,true)}<span>{p.n.split(" ").slice(-1)[0]}</span></span>)}
+            </div>
+          ))}
+          {a.nakedQBs.length>0 && <div style={{fontSize:11.5,color:"#f4a848",marginTop:4}}>⚠ Naked QBs (no teammates): {a.nakedQBs.map(p=>p.n).join(", ")}</div>}
+        </div>
+
+        {/* W17 */}
+        <div className="panel-t">🏆 Week 17 Finals Coverage</div>
+        <div style={{marginBottom:14}}>
+          {a.gameStacked.length>0 ? a.gameStacked.map(g=>(
+            <div key={g.home} style={{fontSize:12,color:"#3ecf8e",padding:"3px 0"}} className="mono">✓ {g.away} @ {g.home} — both sides held (Grade {g.grade} env)</div>
+          )) : <div style={{fontSize:12,color:"#e08c5c"}}>No W17 game held on both sides.</div>}
+          {a.w17Exposure.slice(0,4).map(({g,n})=>(
+            <div key={g.home} style={{fontSize:11.5,color:"#5a6a80",padding:"2px 0"}} className="mono">{g.away}@{g.home} (Grade {g.grade}): {n} player{n!==1?"s":""}</div>
+          ))}
+        </div>
+
+        {/* Byes + sched + chalk */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:6}}>
+          <div>
+            <div className="panel-t">Bye Weeks</div>
+            {Object.entries(a.byes).sort((x,y)=>+x[0]-+y[0]).map(([w,n])=>(
+              <div key={w} style={{fontSize:11.5,color:n>=5?"#e05c5c":n>=4?"#f4a848":"#5a6a80"}} className="mono">W{w}: {n} player{n!==1?"s":""}</div>
+            ))}
+          </div>
+          <div>
+            <div className="panel-t">Differentiation</div>
+            <div style={{fontSize:11.5,color:"#5a6a80"}} className="mono">Value falls: <span style={{color:"#3ecf8e"}}>{a.value}</span></div>
+            <div style={{fontSize:11.5,color:"#5a6a80"}} className="mono">Chalk (±5 ADP): {a.chalk} ({a.chalkPct}%)</div>
+            <div style={{fontSize:11.5,color:"#5a6a80"}} className="mono">Reaches: <span style={{color:a.reach>2?"#e05c5c":"#5a6a80"}}>{a.reach}</span></div>
+            <div style={{fontSize:11.5,color:"#5a6a80"}} className="mono">Leverage zone (180-214): <span style={{color:"#f4a848"}}>{a.levZone}</span></div>
+            <div style={{fontSize:11.5,color:"#5a6a80",marginTop:4}} className="mono">W15-17 sched: {a.schedMix.elite+a.schedMix.good}🟢 {a.schedMix.avg}⚪ {a.schedMix.tough+a.schedMix.brutal}🔴</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════
+// DRAFT TAB — the whole show
+// ══════════════════════════════════════════════════════
+function DraftTab({ picks, slot, teamSize, plat, draftName,
+                    onSetSlot, onSetTeamSize, onSetPlat, onSetDraftName,
+                    onAddPick, onRemovePick, onClearPicks, onSaveDraft,
+                    gone, onMarkGone, onUnmarkGone,
+                    portExp, totalPort }) {
+  const [srch, setSrch] = useState("");
+  const [posF, setPosF] = useState("ALL");
+  const [expanded, setExpanded] = useState(null);
+  const [saved, setSaved] = useState(false);
+  const [sortMode, setSortMode] = useState("score"); // score | adp
+  const [showGone, setShowGone] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+  const inputRef = useRef(null);
+  useEffect(()=>{ inputRef.current?.focus(); },[]);
+
+  const round = picks.length + 1;
+  const overall = myOverall(round, slot, teamSize);
+  const nextOverall = myOverall(round+1, slot, teamSize);
+  const adpKey = plat==="DK" ? "dkAdp" : "udAdp";
+
+  // Build score context
+  const ctx = useMemo(() => {
+    const counts = {QB:0,RB:0,WR:0,TE:0};
+    const ownedByTeam = {};
+    const ownedQBTeams = new Set();
+    picks.forEach(pk => {
+      const p = pk.player;
+      if (counts[p.pos]!==undefined) counts[p.pos]++;
+      if (!ownedByTeam[p.tm]) ownedByTeam[p.tm] = [];
+      ownedByTeam[p.tm].push(p);
+      if (p.pos==="QB") ownedQBTeams.add(p.tm);
+    });
+    // bring-back map: W15-17 opponents of ANY team I roster → my team + week (+stronger if I own that QB)
+    const bringbackMap = {};
+    Object.keys(ownedByTeam).forEach(tm => {
+      if (tm === "FA") return;
+      (SCHED[tm]?.w||[]).forEach(([opp], i) => {
+        if (!bringbackMap[opp]) bringbackMap[opp] = [];
+        bringbackMap[opp].push({ myTm: tm, wk: 15+i, qbAnchor: ownedQBTeams.has(tm) });
+      });
+    });
+    return { overall, nextOverall, round, counts, ownedByTeam, bringbackMap, portExp, totalPort, adpKey };
+  }, [picks, overall, nextOverall, round, portExp, totalPort, adpKey]);
+
+  const ownedSet = useMemo(()=>new Set(picks.map(p=>p.player.n)),[picks]);
+
+  // Score all available players — three buckets:
+  // visible | autoGone (ADP says ~97% drafted) | manualGone (user-marked ✕)
+  const goneSet = useMemo(()=>new Set(gone),[gone]);
+  const AUTO_GONE_MARGIN = 12; // ADP this far before current pick = near-certain drafted
+  const isSearching = srch.length >= 2;
+
+  const { scored, autoGone, manualGone } = useMemo(() => {
+    const base = PLAYERS
+      .filter(p => !ownedSet.has(p.n))
+      .filter(p => posF==="ALL"||p.pos===posF)
+      .filter(p => !srch || p.n.toLowerCase().includes(srch.toLowerCase()) || p.tm.toLowerCase().startsWith(srch.toLowerCase()))
+      .map(p => ({ p, ...computeScore(p, ctx), pback: pickBackOdds(p[adpKey]||p.udAdp, nextOverall),
+                   isManualGone: goneSet.has(p.n),
+                   isAutoGone: (p[adpKey]||p.udAdp) < overall - AUTO_GONE_MARGIN }));
+    const srt = (a,b) => sortMode==="score" ? b.score-a.score : (a.p[adpKey]??999)-(b.p[adpKey]??999);
+    // While searching: show EVERYTHING (gone players get a badge + undo)
+    if (isSearching) return { scored: base.sort(srt).slice(0,60), autoGone: [], manualGone: [] };
+    return {
+      scored: base.filter(x=>!x.isManualGone && !x.isAutoGone).sort(srt).slice(0,60),
+      autoGone: base.filter(x=>x.isAutoGone && !x.isManualGone).sort(srt),
+      manualGone: base.filter(x=>x.isManualGone).sort(srt),
+    };
+  }, [ownedSet, posF, srch, ctx, sortMode, adpKey, nextOverall, goneSet, overall, isSearching]);
+
+  // Construction alert (one-line ticker, most urgent only)
+  const ticker = useMemo(() => {
+    const cp = getCheckpoint(round);
+    const c = ctx.counts;
+    for (const pos of ["WR","RB"]) {
+      const th = cp.t[pos];
+      const roundsLeft = (cp.label==="R6"?6:cp.label==="R10"?10:cp.label==="R14"?14:18) - (round-1);
+      if (c[pos] < th.min && (th.min - c[pos]) >= roundsLeft) return {cls:"tk-alert", msg:`🚨 Need ${th.min-c[pos]} ${pos} in next ${roundsLeft} picks to hit ${cp.label} threshold (${th.min} min)`};
+      if (c[pos] < th.min && (th.min - c[pos]) >= roundsLeft - 2) return {cls:"tk-warn", msg:`⚠️ ${pos} behind pace: ${c[pos]}/${th.min} by ${cp.label}`};
+    }
+    if (round>=6 && round<=8 && c.QB===0) return {cls:"tk-warn", msg:`⚠️ QB window open (R6-8): Burrow 65 · Daniels 67 · Caleb 69 · Maye 69 · Hurts 72`};
+    if (round>=14 && c.QB<1) return {cls:"tk-alert", msg:`🚨 Must draft QB1 now — zero-QB past R14 bleeds badly`};
+    if (round>=15 && c.QB===2) return {cls:"tk-ok", msg:`✓ QB3 window: 3-QB builds beat 2-QB in 4/6 BBM years (R15-18, ADP 160+)`};
+    if (round>=13) return {cls:"tk-ok", msg:`✓ Leverage zone live: ADP 180-214 players contribute like ADP 180-199 but drafted less`};
+    return null;
+  }, [round, ctx.counts]);
+
+  const handleSave = () => {
+    if (!draftName.trim() || !picks.length) return;
+    onSaveDraft({name:draftName, players:picks.map(p=>p.player), slot});
+    setSaved(true); setTimeout(()=>setSaved(false),2000);
+  };
+
+  const buildStr = `${ctx.counts.QB}/${ctx.counts.RB}/${ctx.counts.WR}/${ctx.counts.TE}`;
+
+  return (
+    <div>
+      {showAnalysis && <AnalysisModal picks={picks} slot={slot} teamSize={teamSize} adpKey={adpKey} onClose={()=>setShowAnalysis(false)}/>}
+      {/* Setup row */}
+      <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
+        <select className="inp" style={{fontSize:12}} value={slot} onChange={e=>onSetSlot(+e.target.value)}>
+          {Array.from({length:teamSize},(_,i)=><option key={i+1} value={i+1}>Slot {i+1}</option>)}
+        </select>
+        <select className="inp" style={{fontSize:12}} value={teamSize} onChange={e=>{const n=+e.target.value;onSetTeamSize(n);if(slot>n)onSetSlot(1);}}>
+          {[10,12,14].map(s=><option key={s} value={s}>{s}tm</option>)}
+        </select>
+        <div style={{display:"flex",gap:2,background:"#0d1420",border:"1px solid #151f2e",borderRadius:7,padding:2}}>
+          {["UD","DK"].map(pl=><button key={pl} style={{padding:"4px 11px",borderRadius:5,fontSize:11.5,fontWeight:600,border:"none",background:plat===pl?"#162030":"transparent",color:plat===pl?"#e2e8f0":"#3a4d63",cursor:"pointer"}} onClick={()=>onSetPlat(pl)}>{pl}</button>)}
+        </div>
+        <input className="inp" style={{flex:1,minWidth:110,fontSize:12}} placeholder="Draft name..." value={draftName} onChange={e=>onSetDraftName(e.target.value)}/>
+        {draftName && picks.length>0 && <button onClick={handleSave} style={{padding:"6px 12px",background:saved?"#3ecf8e18":"#3ecf8e",border:"1px solid #3ecf8e",borderRadius:7,color:saved?"#3ecf8e":"#080b10",fontWeight:700,fontSize:11.5,cursor:"pointer"}}>{saved?"✓":"Save"}</button>}
+        {picks.length>=8 && <button onClick={()=>setShowAnalysis(true)} style={{padding:"6px 12px",background:"#f4a84812",border:"1px solid #f4a84844",borderRadius:7,color:"#f4a848",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>📊 Analyze</button>}
+        {picks.length>0 && <button onClick={onClearPicks} style={{padding:"6px 10px",background:"transparent",border:"1px solid #e05c5c33",borderRadius:7,color:"#e05c5c",fontSize:11.5,cursor:"pointer"}}>Clear</button>}
+      </div>
+
+      {/* Status strip */}
+      <div className="status-strip">
+        <span className="pick-now">R{round} · {round}.{String(round%2===1?slot:teamSize+1-slot).padStart(2,"0")} · #{overall}</span>
+        {["QB","RB","WR","TE"].map(pos=>{
+          const c = POS_C[pos];
+          const cp = getCheckpoint(round);
+          const cnt = ctx.counts[pos];
+          const under = cnt < cp.t[pos].min;
+          const over = cnt > cp.t[pos].max;
+          return <span key={pos} className="pos-count" style={{borderColor:under?"#f4a84855":over?"#e05c5c55":c.bd, color:under?"#f4a848":over?"#e05c5c":c.tx, background:c.bg}}>{pos} {cnt}</span>;
+        })}
+        <span className="build-chip">build {buildStr} · target 2-3/5-6/6-7/2-3</span>
+      </div>
+
+      {/* Roster pills (sticky) */}
+      {picks.length>0 && (
+        <div className="roster-bar">
+          <div className="roster-pills">
+            {picks.map((pk,i)=>(
+              <span key={i} className="rpill">
+                <span style={{color:"#2a3850",fontSize:9}}>R{pk.round}</span>
+                {pb(pk.player.pos, true)}
+                <span style={{fontWeight:600}}>{pk.player.n.split(" ").slice(-1)[0]}</span>
+                <span className="rx" onClick={()=>onRemovePick(i)}>×</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Ticker */}
+      {ticker && <div className={`ticker ${ticker.cls}`}>{ticker.msg}</div>}
+
+      {/* Search + filters */}
+      <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
+        <input ref={inputRef} className="inp" style={{flex:1,minWidth:140,fontSize:14,padding:"9px 12px"}} placeholder="⚡ Search..." value={srch} onChange={e=>setSrch(e.target.value)}/>
+        {["ALL","QB","RB","WR","TE"].map(p=>(
+          <button key={p} className={`chip ${posF===p?"chip-on":"chip-off"}`} onClick={()=>setPosF(p)} style={{fontSize:11,padding:"6px 10px"}}>{p}</button>
+        ))}
+        <button className={`chip ${sortMode==="adp"?"chip-on":"chip-off"}`} onClick={()=>setSortMode(m=>m==="score"?"adp":"score")} style={{fontSize:11,padding:"6px 10px"}}>{sortMode==="score"?"by Score":"by ADP"}</button>
+      </div>
+
+      {/* THE BOARD — sorted by pick score */}
+      <div className="board">
+        {scored.map(({p, score, why, icons, pback, pct, isManualGone, isAutoGone}) => {
+          const g = SCHED_GRADE[p.tm];
+          const scoreCls = score>=68?"sc-hot":score>=58?"sc-good":score>=45?"sc-mid":"sc-low";
+          const isExp = expanded===p.n;
+          const adp = p[adpKey]||p.udAdp;
+          const pbColor = pback>=70?"#3ecf8e":pback>=40?"#f4a848":"#e05c5c";
+          const goneFlag = isManualGone || (isSearching && isAutoGone);
+          return (
+            <div key={p.n} className="brow" style={goneFlag?{opacity:.45}:undefined}>
+              <div className="brow-main" onClick={()=>setExpanded(isExp?null:p.n)}>
+                <span className={`score-chip ${scoreCls}`}>{score}</span>
+                {pb(p.pos)}
+                <div style={{minWidth:0}}>
+                  <div className="brow-name">{p.n}</div>
+                  <div className="brow-sub">
+                    {g && <span className="sched-dot" style={{background:GRADE_C[g]}}/>}
+                    <span>{p.tm}</span>
+                    {isManualGone && <span style={{color:"#e05c5c",fontWeight:700}}>GONE</span>}
+                    {!isManualGone && isSearching && isAutoGone && <span style={{color:"#e08c5c"}}>likely gone</span>}
+                    {icons.length>0 && (
+                      <span className="corr-icons">
+                        {icons.filter((ic,i,a)=>a.findIndex(x=>x.kind===ic.kind&&x.pos===ic.pos&&x.tm===ic.tm&&x.wk===ic.wk)===i).map((ic,i)=> ic.kind==="bb"
+                          ? <span key={i} className="corr-icon corr-bb" title={`Bring-back: faces your ${ic.tm} stack in Week ${ic.wk}`}>{ic.tm}·{ic.wk}</span>
+                          : pb(ic.pos, true))}
+                      </span>
+                    )}
+                    {pct>=33 && <span style={{color:"#f4a848"}}>{pct}%exp</span>}
+                  </div>
+                </div>
+                <div className="brow-right">
+                  <div className="brow-adp">
+                    <div>{plat==="DK"&&p.dkEst?"~":""}{adp}</div>
+                    <div style={{fontSize:8.5,color:"#2a3850"}}>R{Math.ceil(adp/teamSize)}</div>
+                  </div>
+                  {isManualGone
+                    ? <button className="gone-btn undo" onClick={e=>{e.stopPropagation();onUnmarkGone(p.n);}} title="Undo — he's still available">↩</button>
+                    : <button className="gone-btn" onClick={e=>{e.stopPropagation();onMarkGone(p.n);setExpanded(null);}} title="Drafted by another team">✕</button>}
+                  <button className="draft-btn" onClick={e=>{e.stopPropagation();onAddPick(p);setExpanded(null);}}>+</button>
+                </div>
+              </div>
+              {isExp && (
+                <div className="brow-detail">
+                  <div className="detail-meta">
+                    <span className="pback" style={{color:pbColor,borderColor:pbColor+"44",background:pbColor+"10"}}>🔙 {pback}% back at #{nextOverall}</span>
+                    <span>UD {p.udAdp} · DK {p.dkEst?"~"+p.dkAdp+" est":p.dkAdp||"~"}</span>
+                    <span>Proj {p.proj??"—"}</span>
+                    {SCHED[p.tm] && <span>W15-17: {SCHED[p.tm].w.map(([o,h])=>h==="A"?"@"+o:o).join(" ")}</span>}
+                    {SCHED[p.tm]?.bye && <span style={{color:"#e05c5c"}}>BYE W{SCHED[p.tm].bye}</span>}
+                  </div>
+                  {why.length>0 ? why.map((w,i)=>(
+                    <div key={i} className="why-row">
+                      <span>{w.t}</span>
+                      <span className="why-pts" style={{color:w.pts>0?"#3ecf8e":"#e05c5c"}}>{w.pts>0?"+":""}{Math.round(w.pts)}</span>
+                    </div>
+                  )) : <div className="why-row"><span>Baseline value at this pick</span><span className="why-pts">50</span></div>}
+                </div>
+              )}
+            </div>
+          );
+        })}
+        {scored.length===0 && <div className="empty">No players match</div>}
+      </div>
+
+      {/* Collapsed: likely drafted + manually marked gone */}
+      {!isSearching && (autoGone.length>0 || manualGone.length>0) && (
+        <div style={{marginTop:8}}>
+          <button onClick={()=>setShowGone(v=>!v)} style={{width:"100%",padding:"8px",background:"#0d1420",border:"1px solid #1c2840",borderRadius:8,color:"#5a6a80",fontSize:12,cursor:"pointer",fontFamily:"DM Mono,monospace"}}>
+            🚫 {autoGone.length + manualGone.length} off the board ({manualGone.length} marked · {autoGone.length} likely by ADP) {showGone?"▲":"▼"}
+          </button>
+          {showGone && (
+            <div className="board" style={{marginTop:4}}>
+              {[...manualGone, ...autoGone].map(({p, score, isManualGone}) => (
+                <div key={p.n} className="brow" style={{opacity:.5}}>
+                  <div className="brow-main" style={{minHeight:38,padding:"5px 10px"}}>
+                    <span className="score-chip sc-mid" style={{minWidth:30,height:24,fontSize:11}}>{score}</span>
+                    {pb(p.pos)}
+                    <div style={{minWidth:0}}>
+                      <div className="brow-name" style={{fontSize:12.5}}>{p.n}</div>
+                      <div className="brow-sub">
+                        <span>{p.tm}</span>
+                        <span style={{color:isManualGone?"#e05c5c":"#e08c5c"}}>{isManualGone?"marked gone":"ADP "+(p[adpKey]||p.udAdp)+" — likely drafted"}</span>
+                      </div>
+                    </div>
+                    <div className="brow-right">
+                      {isManualGone && <button className="gone-btn undo" onClick={()=>onUnmarkGone(p.n)} title="Undo">↩</button>}
+                      <button className="draft-btn" onClick={()=>onAddPick(p)} title="He fell to me — draft him">+</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════
+// STACKS TAB (pre-draft reference, simplified)
+// ══════════════════════════════════════════════════════
+function StacksTab({ onAddPick, picks=[], slot=6, teamSize=12, plat="UD", gone=[] }) {
+  const adpKey = plat==="DK" ? "dkAdp" : "udAdp";
+  const goneSet = useMemo(()=>new Set(gone),[gone]);
+  const ownedSet = useMemo(()=>new Set(picks.map(p=>p.player.n)),[picks]);
+  const currentRound = picks.length + 1;
+  const currentOverall = myOverall(currentRound, slot, teamSize);
+
+  // Best of MY remaining picks to target a player at: round whose pick# is closest to his ADP (not in the past)
+  const targetRound = (adp) => {
+    let best = null, bestDist = 1e9;
+    for (let r = currentRound; r <= 18; r++) {
+      const ov = myOverall(r, slot, teamSize);
+      const d = Math.abs(ov - adp);
+      if (d < bestDist) { bestDist = d; best = { r, ov, odds: pickBackOdds(adp, ov) }; }
+    }
+    return best;
+  };
+
+  // My stacks: group picks by team
+  const myStacks = useMemo(() => {
+    const byTeam = {};
+    picks.forEach(pk => {
+      const p = pk.player;
+      if (p.tm==="FA") return;
+      if (!byTeam[p.tm]) byTeam[p.tm] = [];
+      byTeam[p.tm].push(p);
+    });
+    return Object.entries(byTeam)
+      .map(([tm, mine]) => {
+        const avail = PLAYERS
+          .filter(p => p.tm===tm && !ownedSet.has(p.n) && !goneSet.has(p.n) && (p[adpKey]||p.udAdp) > currentOverall - 12)
+          .sort((a,b)=>(a[adpKey]||a.udAdp)-(b[adpKey]||b.udAdp))
+          .slice(0,3)
+          .map(p => ({ p, tgt: targetRound(p[adpKey]||p.udAdp) }));
+        // bring-backs: best available player from each W15-17 opponent
+        const bbs = (SCHED[tm]?.w||[]).map(([opp,ha],i) => {
+          const best = PLAYERS
+            .filter(p => p.tm===opp && (p.pos==="WR"||p.pos==="RB"||p.pos==="TE") && !ownedSet.has(p.n) && !goneSet.has(p.n) && (p[adpKey]||p.udAdp) > currentOverall - 12)
+            .sort((a,b)=>(a[adpKey]||a.udAdp)-(b[adpKey]||b.udAdp))[0];
+          return best ? { p: best, opp, wk: 15+i, ha, tgt: targetRound(best[adpKey]||best.udAdp) } : null;
+        }).filter(Boolean);
+        return { tm, mine, avail, bbs, hasQB: mine.some(p=>p.pos==="QB") };
+      })
+      .sort((a,b) => b.mine.length - a.mine.length || (b.hasQB?1:0)-(a.hasQB?1:0));
+  }, [picks, ownedSet, goneSet, adpKey, currentOverall, slot, teamSize]);
+  // Non-rostered stacks: teams where I own NOBODY, with a still-attainable QB + pass-catcher core
+  const nonRostered = useMemo(() => {
+    const myTeams = new Set(picks.map(pk=>pk.player.tm));
+    const byTeam = {};
+    PLAYERS.forEach(p => {
+      if (p.tm==="FA" || myTeams.has(p.tm)) return;
+      if (ownedSet.has(p.n) || goneSet.has(p.n)) return;
+      const adp = p[adpKey]||p.udAdp;
+      if (adp <= currentOverall - 12) return; // effectively drafted
+      if (!byTeam[p.tm]) byTeam[p.tm] = [];
+      byTeam[p.tm].push(p);
+    });
+    return Object.entries(byTeam).map(([tm, avail]) => {
+      const srt = avail.sort((a,b)=>(a[adpKey]||a.udAdp)-(b[adpKey]||b.udAdp));
+      const qb = srt.find(p=>p.pos==="QB");
+      const pcs = srt.filter(p=>p.pos==="WR"||p.pos==="TE").slice(0,2);
+      const rb = srt.find(p=>p.pos==="RB");
+      if (!qb || pcs.length===0) return null; // need a stackable core remaining
+      const pieces = [qb, ...pcs, ...(rb?[rb]:[])].map(p=>({p, tgt: targetRound(p[adpKey]||p.udAdp)}));
+      const entry = Math.min(...pieces.map(x=>x.p[adpKey]||x.p.udAdp));
+      return { tm, pieces, entry, entryTgt: targetRound(entry), g: SCHED_GRADE[tm]||"avg" };
+    }).filter(Boolean).sort((a,b)=>a.entry-b.entry);
+  }, [picks, ownedSet, goneSet, adpKey, currentOverall, slot, teamSize]);
+  return (
+    <div>
+      {/* ── YOUR DRAFT STACKS — live, based on current picks ── */}
+      {myStacks.length > 0 && (
+        <div style={{marginBottom:18}}>
+          <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".8px",color:"#3ecf8e88",fontFamily:"DM Mono,monospace",marginBottom:8}}>
+            ⚡ Your Draft — Stack Targets (R{currentRound}, pick #{currentOverall})
+          </div>
+          <div style={{display:"grid",gap:8,gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))"}}>
+            {myStacks.map(({tm, mine, avail, bbs, hasQB}) => {
+              const g = SCHED_GRADE[tm]||"avg";
+              return (
+                <div key={tm} className="stk-card" style={{borderColor:hasQB?"#3ecf8e33":"#151f2e"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                    <span style={{fontWeight:700,fontSize:14}}>{tm} {hasQB && <span style={{fontSize:9.5,color:"#3ecf8e",fontFamily:"DM Mono"}}>QB STACK</span>}</span>
+                    <span className="mono" style={{fontSize:10,color:GRADE_C[g]}}>{g.toUpperCase()} W15-17</span>
+                  </div>
+                  {/* my pieces */}
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:8}}>
+                    {mine.map(p=>(
+                      <span key={p.n} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#3ecf8e10",border:"1px solid #3ecf8e33",borderRadius:5,padding:"2px 7px",fontSize:11}}>
+                        {pb(p.pos,true)}<span style={{fontWeight:600,color:"#3ecf8e"}}>{p.n}</span><span style={{fontSize:9,color:"#3ecf8e"}}>✓</span>
+                      </span>
+                    ))}
+                  </div>
+                  {/* completions */}
+                  {avail.length>0 && <>
+                    <div style={{fontSize:9,color:"#2a3850",fontFamily:"DM Mono",textTransform:"uppercase",letterSpacing:".5px",marginBottom:4}}>Complete the stack</div>
+                    {avail.map(({p,tgt})=>(
+                      <div key={p.n} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #0a111e",fontSize:12}}>
+                        <span style={{display:"flex",alignItems:"center",gap:5}}>
+                          {pb(p.pos,true)}<span style={{fontWeight:600}}>{p.n}</span>
+                          <span className="mono" style={{fontSize:10,color:"#3a4d63"}}>{plat==="DK"&&p.dkEst?"~":""}{p[adpKey]||p.udAdp}</span>
+                        </span>
+                        <span style={{display:"flex",alignItems:"center",gap:6}}>
+                          {tgt && <span className="mono" style={{fontSize:10,color:tgt.odds>=60?"#3ecf8e":tgt.odds>=35?"#f4a848":"#e05c5c"}}>tgt R{tgt.r} · {tgt.odds}%</span>}
+                          <button onClick={()=>onAddPick(p)} style={{width:20,height:20,borderRadius:4,background:"#3ecf8e18",border:"1px solid #3ecf8e44",color:"#3ecf8e",fontSize:13,lineHeight:1,cursor:"pointer",fontWeight:700}}>+</button>
+                        </span>
+                      </div>
+                    ))}
+                  </>}
+                  {/* bring-backs */}
+                  {bbs.length>0 && <>
+                    <div style={{fontSize:9,color:"#a78bfa66",fontFamily:"DM Mono",textTransform:"uppercase",letterSpacing:".5px",margin:"7px 0 4px"}}>Bring-backs (W15-17)</div>
+                    {bbs.map(({p,opp,wk,ha,tgt})=>(
+                      <div key={p.n+wk} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #0a111e",fontSize:12}}>
+                        <span style={{display:"flex",alignItems:"center",gap:5}}>
+                          <span className="corr-icon corr-bb">{tm}·{wk}</span>
+                          {pb(p.pos,true)}<span style={{fontWeight:600}}>{p.n}</span>
+                          <span className="mono" style={{fontSize:10,color:"#3a4d63"}}>{plat==="DK"&&p.dkEst?"~":""}{p[adpKey]||p.udAdp}</span>
+                        </span>
+                        <span style={{display:"flex",alignItems:"center",gap:6}}>
+                          {tgt && <span className="mono" style={{fontSize:10,color:tgt.odds>=60?"#3ecf8e":tgt.odds>=35?"#f4a848":"#e05c5c"}}>tgt R{tgt.r} · {tgt.odds}%</span>}
+                          <button onClick={()=>onAddPick(p)} style={{width:20,height:20,borderRadius:4,background:"#a78bfa18",border:"1px solid #a78bfa44",color:"#a78bfa",fontSize:13,lineHeight:1,cursor:"pointer",fontWeight:700}}>+</button>
+                        </span>
+                      </div>
+                    ))}
+                  </>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {myStacks.length === 0 && (
+        <div className="ticker tk-ok" style={{marginBottom:14}}>Draft players in the ⚡ Draft tab — your stacks and completion targets will appear here live.</div>
+      )}
+
+      <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".8px",color:"#2a3850",fontFamily:"DM Mono,monospace",marginBottom:8}}>
+        Non-Rostered Stacks — pivots still on the board ({nonRostered.length} teams)
+      </div>
+      <div style={{display:"grid",gap:8,gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))"}}>
+        {nonRostered.map(({tm, pieces, entry, entryTgt, g}) => (
+          <div key={tm} className="stk-card">
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+              <span style={{fontWeight:700,fontSize:14}}>{tm}</span>
+              <span style={{display:"flex",gap:6,alignItems:"center"}}>
+                {entryTgt && <span className="mono" style={{fontSize:10,color:"#5a6a80",background:"#10192a",border:"1px solid #1c2840",padding:"2px 7px",borderRadius:4}}>starts R{entryTgt.r}</span>}
+                <span className="mono" style={{fontSize:10,color:GRADE_C[g]}}>{g.toUpperCase()}</span>
+              </span>
+            </div>
+            {pieces.map(({p,tgt})=>(
+              <div key={p.n} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"4px 0",borderBottom:"1px solid #0a111e",fontSize:12}}>
+                <span style={{display:"flex",alignItems:"center",gap:5}}>
+                  {pb(p.pos,true)}<span style={{fontWeight:600}}>{p.n}</span>
+                  <span className="mono" style={{fontSize:10,color:"#3a4d63"}}>{plat==="DK"&&p.dkEst?"~":""}{p[adpKey]||p.udAdp}</span>
+                </span>
+                <span style={{display:"flex",alignItems:"center",gap:6}}>
+                  {tgt && <span className="mono" style={{fontSize:10,color:tgt.odds>=60?"#3ecf8e":tgt.odds>=35?"#f4a848":"#e05c5c"}}>tgt R{tgt.r} · {tgt.odds}%</span>}
+                  <button onClick={()=>onAddPick(p)} style={{width:20,height:20,borderRadius:4,background:"#3ecf8e18",border:"1px solid #3ecf8e44",color:"#3ecf8e",fontSize:13,lineHeight:1,cursor:"pointer",fontWeight:700}}>+</button>
+                </span>
+              </div>
+            ))}
+          </div>
+        ))}
+        {nonRostered.length===0 && <div className="empty">No complete non-rostered stacks remain — all remaining QB cores are gone or rostered</div>}
+      </div>
+
+      {/* ── W17 FINALS GAMES — environment-ranked, with my coverage ── */}
+      <div style={{fontSize:10,textTransform:"uppercase",letterSpacing:".8px",color:"#f4a84888",fontFamily:"DM Mono,monospace",margin:"18px 0 8px"}}>
+        🏆 Week 17 Finals Games — ranked by environment
+      </div>
+      <div style={{display:"grid",gap:6,gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))"}}>
+        {W17_GAMES.map(g => {
+          const mineAway = picks.filter(pk=>pk.player.tm===g.away).map(pk=>pk.player);
+          const mineHome = picks.filter(pk=>pk.player.tm===g.home).map(pk=>pk.player);
+          const bothSides = mineAway.length>0 && mineHome.length>0;
+          const topAvail = (tm) => PLAYERS
+            .filter(p=>p.tm===tm && !ownedSet.has(p.n) && !goneSet.has(p.n) && (p[adpKey]||p.udAdp) > currentOverall - 12)
+            .sort((a,b)=>(a[adpKey]||a.udAdp)-(b[adpKey]||b.udAdp))[0];
+          const aA = topAvail(g.away), aH = topAvail(g.home);
+          return (
+            <div key={g.home} className="stk-card" style={{borderColor:bothSides?"#f4a84855":g.grade==="A"?"#3ecf8e22":"#151f2e",padding:"10px 12px"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                <span style={{fontWeight:700,fontSize:13}} className="mono">{g.away} @ {g.home}</span>
+                <span style={{display:"flex",gap:5,alignItems:"center"}}>
+                  {bothSides && <span className="mono" style={{fontSize:9,color:"#f4a848",background:"#f4a84812",border:"1px solid #f4a84833",padding:"1px 6px",borderRadius:4}}>GAME STACKED</span>}
+                  <span className="mono" style={{fontSize:11,fontWeight:700,color:W17_GRADE_C[g.grade]}}>{g.grade}</span>
+                </span>
+              </div>
+              {/* my coverage per side */}
+              <div style={{display:"flex",gap:8,fontSize:10.5,marginBottom:5}} className="mono">
+                <span style={{color:mineAway.length?"#3ecf8e":"#2a3850"}}>{g.away}: {mineAway.length?mineAway.map(p=>p.n.split(" ").slice(-1)[0]).join(", "):"—"}</span>
+                <span style={{color:mineHome.length?"#3ecf8e":"#2a3850"}}>{g.home}: {mineHome.length?mineHome.map(p=>p.n.split(" ").slice(-1)[0]).join(", "):"—"}</span>
+              </div>
+              {/* quick targets for uncovered sides */}
+              {(!bothSides) && (
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                  {[!mineAway.length&&aA?{p:aA,side:g.away}:null, !mineHome.length&&aH?{p:aH,side:g.home}:null].filter(Boolean).map(({p,side})=>(
+                    <span key={p.n} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#080b10",border:"1px solid #151f2e",borderRadius:5,padding:"2px 6px",fontSize:10.5}}>
+                      {pb(p.pos,true)}<span style={{fontWeight:600}}>{p.n}</span>
+                      <span className="mono" style={{fontSize:9.5,color:"#3a4d63"}}>{p[adpKey]||p.udAdp}</span>
+                      <button onClick={()=>onAddPick(p)} style={{width:17,height:17,borderRadius:4,background:"#f4a84818",border:"1px solid #f4a84844",color:"#f4a848",fontSize:11,lineHeight:1,cursor:"pointer",fontWeight:700}}>+</button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════
+// PORTFOLIO TAB
+// ══════════════════════════════════════════════════════
+function PortfolioTab({ teams, onAdd, onRemoveTeam, onRemovePlayer }) {
+  const [activeId, setActiveId] = useState(teams[0]?.id||null);
+  useEffect(()=>{ if(!teams.find(t=>t.id===activeId)&&teams.length>0) setActiveId(teams[0].id); },[teams]);
+  const team = teams.find(t=>t.id===activeId)||teams[0];
+  const allPs = teams.flatMap(t=>t.players);
+  const total = teams.length;
+  const expMap = useMemo(()=>{const m={};allPs.forEach(p=>{m[p.n]=(m[p.n]||0)+1;});return m;},[allPs]);
+  const topExp = Object.entries(expMap).sort((a,b)=>b[1]-a[1]).slice(0,16);
+  const highExp = topExp.filter(([n,cnt])=>total>1&&Math.round((cnt/total)*100)>=50);
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+        {teams.map(t=><button key={t.id} className={`chip ${activeId===t.id?"chip-on":"chip-off"}`} onClick={()=>setActiveId(t.id)} style={{fontSize:11}}>{t.name} ({t.players.length})</button>)}
+        <button className="chip chip-off" style={{fontSize:11}} onClick={onAdd}>+ New</button>
+      </div>
+      <div className="port-grid">
+        <div className="panel">
+          <div className="panel-t">{team?.name||"Draft"}</div>
+          {team && (team.players.length===0 ? <div className="empty">Save a draft from the Draft tab</div> :
+            team.players.map(p=>{
+              const cnt=expMap[p.n]||0;
+              const pct=total>0?Math.round((cnt/total)*100):0;
+              const g = SCHED_GRADE[p.tm];
+              return(
+                <div key={p.n} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #0a111e",fontSize:12}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    {pb(p.pos)}
+                    <span style={{fontWeight:600}}>{p.n}</span>
+                    <span className="mono" style={{fontSize:10,color:"#3a4d63"}}>{p.tm}</span>
+                    {g && <span className="sched-dot" style={{background:GRADE_C[g]}}/>}
+                  </div>
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    {pct>=33&&<span className="mono" style={{fontSize:10,color:"#f4a848"}}>{pct}%</span>}
+                    <button className="rmv-btn" onClick={()=>onRemovePlayer(team.id,p.n)}>×</button>
+                  </div>
+                </div>
+              );
+            })
+          )}
+          {team && team.players.length>0 && <button style={{marginTop:8,fontSize:11,color:"#e05c5c",background:"none",border:"1px solid #e05c5c22",borderRadius:6,padding:"4px 10px",width:"100%",cursor:"pointer"}} onClick={()=>onRemoveTeam(team.id)}>Remove draft</button>}
+        </div>
+        <div className="panel">
+          <div className="panel-t">Exposure ({total} draft{total!==1?"s":""})</div>
+          {highExp.length>0 && <div className="ticker tk-warn" style={{marginBottom:8}}>⚠️ 50%+ exposure: {highExp.map(([n])=>n).join(", ")}</div>}
+          {topExp.length===0 ? <div className="empty">No drafts saved yet</div> :
+            topExp.map(([name,cnt])=>{
+              const p=PLAYERS.find(pl=>pl.n===name);
+              const pct=Math.round((cnt/total)*100);
+              return(
+                <div key={name} className="exp-row">
+                  {p&&pb(p.pos,true)}
+                  <span className="exp-lbl">{name}</span>
+                  <div className="exp-bg"><div className="exp-fill" style={{width:pct+"%",background:pct>=60?"#e05c5c":pct>=33?"#f4a848":"#3ecf8e"}}/></div>
+                  <span className="exp-pct">{pct}%</span>
+                </div>
+              );
+            })
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════
+// ROOT
+// ══════════════════════════════════════════════════════
+function App() {
+  const [tab, setTab] = useState("draft");
+  const [portfolio, setPortfolio] = useState([]);
+  const [draftPicks, setDraftPicks] = useState([]);
+  const [gone, setGone] = useState([]); // players drafted by OTHER teams (names)
+  const [draftSlot, setDraftSlot] = useState(6);
+  const [draftTeamSize, setDraftTeamSize] = useState(12);
+  const [draftPlat, setDraftPlat] = useState("UD");
+  const [draftName, setDraftName] = useState("");
+
+  const hydrated = useRef(false);
+  useEffect(()=>{
+    (async()=>{
+      try{const r=await window.storage.get("bblab7-port");if(r){const d=JSON.parse(r.value);if(d?.length)setPortfolio(d);}}catch(e){}
+      // Resume in-progress draft (survives reload/close)
+      try{
+        const r2=await window.storage.get("bblab7-live");
+        if(r2){const d=JSON.parse(r2.value);
+          if(d?.picks?.length){setDraftPicks(d.picks);setGone(d.gone||[]);setDraftSlot(d.slot||6);setDraftTeamSize(d.teamSize||12);setDraftPlat(d.plat||"UD");setDraftName(d.name||"");}
+        }
+      }catch(e){}
+      hydrated.current = true;
+    })();
+  },[]);
+
+  // Auto-save live draft after every pick / change
+  useEffect(()=>{
+    if(!hydrated.current) return;
+    try{window.storage.set("bblab7-live",JSON.stringify({picks:draftPicks,gone,slot:draftSlot,teamSize:draftTeamSize,plat:draftPlat,name:draftName}));}catch(e){}
+  },[draftPicks,gone,draftSlot,draftTeamSize,draftPlat,draftName]);
+  const savePort = p => { setPortfolio(p); try{window.storage.set("bblab7-port",JSON.stringify(p));}catch(e){} };
+
+  const portExp = useMemo(()=>{
+    const m={}; portfolio.flatMap(t=>t.players).forEach(p=>{m[p.n]=(m[p.n]||0)+1;});
+    return m;
+  },[portfolio]);
+
+  const addPick = useCallback(p => {
+    setDraftPicks(prev => {
+      if (prev.find(pk=>pk.player.n===p.n)) return prev;
+      return [...prev, {player:p, round: prev.length+1}];
+    });
+    setGone(prev => prev.filter(x=>x!==p.n));
+    setTab("draft");
+  },[]);
+
+  const removePick = i => setDraftPicks(prev=>prev.filter((_,idx)=>idx!==i));
+  const clearPicks = () => { if(window.confirm("Clear all picks?")) { setDraftPicks([]); setGone([]); try{window.storage.delete("bblab7-live");}catch(e){} } };
+  const markGone = useCallback(n => setGone(prev => prev.includes(n) ? prev : [...prev, n]), []);
+  const unmarkGone = useCallback(n => setGone(prev => prev.filter(x=>x!==n)), []);
+  const saveDraft = ({name,players,slot}) => {
+    const id=Date.now();
+    savePort([...portfolio,{id,name:`${name} (S${slot})`,players}]);
+  };
+  const addTeam = () => { const id=Date.now(); savePort([...portfolio,{id,name:`Draft ${portfolio.length+1}`,players:[]}]); };
+  const removeTeam = id => savePort(portfolio.filter(t=>t.id!==id));
+  const removePlayer = (teamId,name) => savePort(portfolio.map(t=>t.id===teamId?{...t,players:t.players.filter(p=>p.n!==name)}:t));
+
+  const TABS=[{id:"draft",l:"⚡ Draft"},{id:"stacks",l:"Stacks"},{id:"portfolio",l:"Portfolio"}];
+
+  return (
+    <>
+      <style>{CSS}</style>
+      <div className="app">
+        <div className="topbar">
+          <div>
+            <div className="logo">best<em>ball</em>.lab</div>
+          </div>
+          <div className="tabs">
+            {TABS.map(t=><button key={t.id} className={`tab ${tab===t.id?"on":""}`} onClick={()=>setTab(t.id)}>{t.l}</button>)}
+          </div>
+        </div>
+        <div style={{display:tab==="draft"?"block":"none"}}>
+          <DraftTab
+            picks={draftPicks} slot={draftSlot} teamSize={draftTeamSize} plat={draftPlat} draftName={draftName}
+            onSetSlot={setDraftSlot} onSetTeamSize={setDraftTeamSize} onSetPlat={setDraftPlat} onSetDraftName={setDraftName}
+            onAddPick={addPick} onRemovePick={removePick} onClearPicks={clearPicks} onSaveDraft={saveDraft}
+            gone={gone} onMarkGone={markGone} onUnmarkGone={unmarkGone}
+            portExp={portExp} totalPort={portfolio.length}
+          />
+        </div>
+        {tab==="stacks" && <StacksTab onAddPick={addPick} picks={draftPicks} slot={draftSlot} teamSize={draftTeamSize} plat={draftPlat} gone={gone}/>}
+        {tab==="portfolio" && <PortfolioTab teams={portfolio} onAdd={addTeam} onRemoveTeam={removeTeam} onRemovePlayer={removePlayer}/>}
+      </div>
+    </>
+  );
+}
+
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+
+</script>
+</body>
+</html>
