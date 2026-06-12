@@ -392,6 +392,39 @@ const GRADE_C = { elite:"#3ecf8e", good:"#7dd98e", avg:"#8b96a8", tough:"#e08c5c
 const GRADE_PTS = { elite:3, good:1.5, avg:0, tough:-1.5, brutal:-3 };
 
 // ══════════════════════════════════════════════════════
+// ADP MOVEMENT — prior UD snapshot (RotoWire, June 1 2026)
+// delta = prev - current; positive = rising (drafted earlier now)
+// ══════════════════════════════════════════════════════
+const PREV_UD = {
+"Bijan Robinson":1.5,"Jahmyr Gibbs":1.6,"Ja'Marr Chase":3.1,"Puka Nacua":4.1,"Jaxon Smith-Njigba":5.2,
+"Christian McCaffrey":7.2,"Jonathan Taylor":6.8,"Amon-Ra St. Brown":7.8,"Justin Jefferson":9.8,"James Cook":11.0,
+"CeeDee Lamb":9.4,"Ashton Jeanty":11.6,"De'Von Achane":14.1,"Saquon Barkley":14.3,"Kenneth Walker III":16.6,
+"Drake London":19.0,"Omarion Hampton":15.6,"Chase Brown":17.7,"Derrick Henry":17.0,"Brock Bowers":19.8,
+"Trey McBride":25.5,"George Pickens":22.6,"Nico Collins":23.2,"Josh Allen":30.5,"Jeremiyah Love":21.8,
+"Chris Olave":31.6,"A.J. Brown":25.8,"Josh Jacobs":31.0,"Rashee Rice":29.8,"Malik Nabers":25.0,
+"Kyren Williams":33.4,"DeVonta Smith":31.6,"Breece Hall":28.2,"Travis Etienne Jr.":30.0,"Tee Higgins":34.9,
+"Emeka Egbuka":39.4,"Tetairoa McMillan":37.1,"Zay Flowers":36.8,"Javonte Williams":35.2,"Ladd McConkey":40.5,
+"Garrett Wilson":39.0,"Colston Loveland":46.4,"D.J. Moore":53.6,"Cam Skattebo":43.0,"Davante Adams":51.7,
+"Luther Burden":43.6,"Jaylen Waddle":50.1,"Terry McLaurin":49.8,"Bucky Irving":47.3,"Lamar Jackson":55.7,
+"Jameson Williams":47.9,"Quinshon Judkins":54.6,"David Montgomery":49.1,"Mike Evans":45.1,"D'Andre Swift":52.3,
+"Rome Odunze":56.2,"Joe Burrow":63.9,"TreVeyon Henderson":48.3,"Christian Watson":59.2,"Jadarian Price":57.8,
+"Drake Maye":71.3,"Jayden Daniels":66.3,"Caleb Williams":70.4,"Jalen Hurts":69.7,"Dak Prescott":78.4,
+"Justin Herbert":83.1,"Trevor Lawrence":86.7,"Matthew Stafford":104.2,"Patrick Mahomes":91.9,
+"Tyler Warren":66.8,"Tucker Kraft":81.4,"Harold Fannin":93.7,"Sam LaPorta":97.3,"Kyle Pitts":104.2,
+"George Kittle":118.8,"Dalton Kincaid":129.8,"Travis Kelce":121.1,"Isaiah Likely":132.6,"Dallas Goedert":135.5,
+"Josh Downs":98.9,"Ryan Flournoy":175.9,"Jordan Addison":85.8,"Xavier Worthy":102.8,"Rachaad White":123.8,
+"Tre Tucker":156.8,"Deebo Samuel":166.5,"Zach Charbonnet":162.6,"Jacoby Brissett":191.3,"Tyreek Hill":207.2,
+"RJ Harvey":84.8,
+};
+const adpMove = (p) => {
+  const prev = PREV_UD[p.n];
+  if (prev == null) return null;
+  const d = prev - p.udAdp; // + = rising
+  if (Math.abs(d) < 3) return null;
+  return { d: Math.round(d*10)/10, rising: d > 0, prev };
+};
+
+// ══════════════════════════════════════════════════════
 // WEEK 17 FINALS GAMES — environment model
 // Offense proxy: sum of team's top-6 projected points
 // ══════════════════════════════════════════════════════
@@ -631,6 +664,20 @@ const pb = (pos, mini=false) => {
   if (mini) return <span className="corr-icon" style={{background:c.bg,borderColor:c.bd,color:c.tx}}>{pos}</span>;
   return <span className="pb" style={{background:c.bg,borderColor:c.bd,color:c.tx}}>{pos}</span>;
 };
+
+// ══════════════════════════════════════════════════════
+// CONSTRUCTION ARCHETYPE — RB count in first 5 picks
+// (saved drafts preserve pick order; imports approximate via ADP order)
+// ══════════════════════════════════════════════════════
+function classifyArchetype(players) {
+  if (!players || players.length < 5) return null;
+  const first5 = players.slice(0, 5);
+  const rbs = first5.filter(p=>p.pos==="RB").length;
+  if (rbs === 0) return { label:"Zero RB",  color:"#5b9cf6" };
+  if (rbs === 1) return { label:"Hero RB",  color:"#3ecf8e" };
+  if (rbs === 2) return { label:"Dual RB",  color:"#f4a848" };
+  return { label:"Robust RB", color:"#e05c5c" };
+}
 
 // ══════════════════════════════════════════════════════
 // TEAM ANALYZER — post-draft report
@@ -958,6 +1005,7 @@ function DraftTab({ picks, slot, teamSize, plat, draftName,
                     <span>{p.tm}</span>
                     {isManualGone && <span style={{color:"#e05c5c",fontWeight:700}}>GONE</span>}
                     {!isManualGone && isSearching && isAutoGone && <span style={{color:"#e08c5c"}}>likely gone</span>}
+                    {(()=>{const m=adpMove(p); return m ? <span style={{color:m.rising?"#3ecf8e":"#e08c5c",fontWeight:700}}>{m.rising?"▲":"▼"}{Math.abs(m.d)}</span> : null;})()}
                     {icons.length>0 && (
                       <span className="corr-icons">
                         {icons.filter((ic,i,a)=>a.findIndex(x=>x.kind===ic.kind&&x.pos===ic.pos&&x.tm===ic.tm&&x.wk===ic.wk)===i).map((ic,i)=> ic.kind==="bb"
@@ -984,6 +1032,7 @@ function DraftTab({ picks, slot, teamSize, plat, draftName,
                   <div className="detail-meta">
                     <span className="pback" style={{color:pbColor,borderColor:pbColor+"44",background:pbColor+"10"}}>🔙 {pback}% back at #{nextOverall}</span>
                     <span>UD {p.udAdp} · DK {p.dkEst?"~"+p.dkAdp+" est":p.dkAdp||"~"}</span>
+                    {(()=>{const m=adpMove(p); return m ? <span style={{color:m.rising?"#3ecf8e":"#e08c5c"}}>7-day: {m.prev}→{p.udAdp} ({m.rising?"rising":"falling"} {Math.abs(m.d)})</span> : null;})()}
                     <span>Proj {p.proj??"—"}</span>
                     {SCHED[p.tm] && <span>W15-17: {SCHED[p.tm].w.map(([o,h])=>h==="A"?"@"+o:o).join(" ")}</span>}
                     {SCHED[p.tm]?.bye && <span style={{color:"#e05c5c"}}>BYE W{SCHED[p.tm].bye}</span>}
@@ -1254,9 +1303,167 @@ function StacksTab({ onAddPick, picks=[], slot=6, teamSize=12, plat="UD", gone=[
 }
 
 // ══════════════════════════════════════════════════════
+// DRAFT IMPORT — image (Claude vision) or pasted text
+// ══════════════════════════════════════════════════════
+const normName = s => s.toLowerCase().replace(/[-–—]/g," ").replace(/[^a-z ]/g,"").replace(/\b(jr|sr|ii|iii|iv|v)\b/g,"").replace(/\s+/g," ").trim();
+const NAME_INDEX = (()=>{ const m={}; PLAYERS.forEach(p=>{ m[normName(p.n)]=p; }); return m; })();
+function matchPlayer(raw) {
+  const q = normName(raw);
+  if (!q) return null;
+  if (NAME_INDEX[q]) return NAME_INDEX[q];
+  // partial: query contains player or player contains query
+  let hits = PLAYERS.filter(p => { const n = normName(p.n); return n.includes(q) || q.includes(n); });
+  if (hits.length === 1) return hits[0];
+  // last name (+ first initial if given)
+  const parts = q.split(" ");
+  const last = parts[parts.length-1];
+  hits = PLAYERS.filter(p => normName(p.n).split(" ").pop() === last);
+  if (hits.length === 1) return hits[0];
+  if (hits.length > 1 && parts.length > 1) {
+    const fi = parts[0][0];
+    const h2 = hits.filter(p => normName(p.n)[0] === fi);
+    if (h2.length === 1) return h2[0];
+  }
+  return null;
+}
+
+function ImportPanel({ onImportTeam }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [preview, setPreview] = useState(null); // {name, matched[], unmatched[]}
+  const [pasteTxt, setPasteTxt] = useState("");
+  const [draftName, setDraftName] = useState("");
+  const fileRef = useRef(null);
+
+  const buildPreview = (names, label) => {
+    const matched = [], unmatched = [], seen = new Set();
+    names.forEach(n => {
+      const p = matchPlayer(n);
+      if (p && !seen.has(p.n)) { matched.push(p); seen.add(p.n); }
+      else if (!p && n.trim()) unmatched.push(n.trim());
+    });
+    setPreview({ name: label || draftName || `Imported ${new Date().toLocaleDateString()}`, matched, unmatched });
+  };
+
+  const handlePaste = () => {
+    if (!pasteTxt.trim()) return;
+    const names = pasteTxt.split(/[\n,;]+/).map(s=>s.trim()).filter(Boolean);
+    buildPreview(names);
+  };
+
+  const callVision = async (b64, mediaType, apiKey) => {
+    const headers = { "Content-Type": "application/json" };
+    if (apiKey) {
+      headers["x-api-key"] = apiKey;
+      headers["anthropic-version"] = "2023-06-01";
+      headers["anthropic-dangerous-direct-browser-access"] = "true";
+    }
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST", headers,
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6", max_tokens: 1500,
+        messages: [{ role: "user", content: [
+          { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
+          { type: "text", text: "This is a screenshot of a completed fantasy football best ball draft roster. List every player name visible, in draft order (top to bottom). Respond with ONLY a JSON array of player name strings, no other text, no markdown fences." }
+        ]}],
+      }),
+    });
+    if (!res.ok) throw new Error("status " + res.status);
+    const data = await res.json();
+    const text = (data.content||[]).map(b=>b.text||"").join("");
+    const clean = text.replace(/```json|```/g,"").trim();
+    return JSON.parse(clean);
+  };
+
+  const handleImage = async (file) => {
+    setBusy(true); setErr("");
+    try {
+      const b64 = await new Promise((res, rej) => {
+        const r = new FileReader();
+        r.onload = () => res(r.result.split(",")[1]);
+        r.onerror = () => rej(new Error("read failed"));
+        r.readAsDataURL(file);
+      });
+      let names;
+      try {
+        names = await callVision(b64, file.type || "image/png", null); // keyless (works inside claude.ai)
+      } catch (e1) {
+        let key = localStorage.getItem("bblab7-key") || "";
+        if (!key) {
+          key = window.prompt("Image reading needs an Anthropic API key on this host (stored only in your browser). Paste key:") || "";
+          if (!key) throw new Error("no key");
+          localStorage.setItem("bblab7-key", key);
+        }
+        try {
+          names = await callVision(b64, file.type || "image/png", key);
+        } catch (e2) {
+          localStorage.removeItem("bblab7-key");
+          throw new Error("API call failed — check key and try again");
+        }
+      }
+      if (!Array.isArray(names) || !names.length) throw new Error("no players detected");
+      buildPreview(names, draftName || file.name.replace(/\.[^.]+$/,""));
+    } catch (e) {
+      setErr(e.message || "import failed");
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  const confirm = () => {
+    if (!preview || !preview.matched.length) return;
+    onImportTeam(preview.name, preview.matched);
+    setPreview(null); setPasteTxt(""); setDraftName("");
+  };
+
+  return (
+    <div className="panel" style={{marginBottom:10}}>
+      <div className="panel-t">Import Completed Draft</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:8}}>
+        <input className="inp" style={{flex:1,minWidth:120,fontSize:12}} placeholder="Draft name (optional)" value={draftName} onChange={e=>setDraftName(e.target.value)}/>
+        <button onClick={()=>fileRef.current?.click()} disabled={busy}
+          style={{padding:"7px 13px",background:"#5b9cf612",border:"1px solid #5b9cf644",borderRadius:7,color:"#5b9cf6",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+          {busy ? "Reading…" : "📷 Upload screenshot"}
+        </button>
+        <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={e=>e.target.files?.[0]&&handleImage(e.target.files[0])}/>
+      </div>
+      <textarea className="inp" style={{width:"100%",minHeight:54,fontSize:12,resize:"vertical",fontFamily:"DM Mono,monospace"}}
+        placeholder="…or paste player names (one per line or comma-separated, in draft order)"
+        value={pasteTxt} onChange={e=>setPasteTxt(e.target.value)}/>
+      {pasteTxt.trim() && <button onClick={handlePaste} style={{marginTop:6,padding:"6px 12px",background:"#3ecf8e18",border:"1px solid #3ecf8e44",borderRadius:7,color:"#3ecf8e",fontSize:12,fontWeight:700,cursor:"pointer"}}>Parse names</button>}
+      {err && <div className="ticker tk-alert" style={{marginTop:8}}>⚠ {err}</div>}
+
+      {preview && (
+        <div style={{marginTop:10,background:"#0a111e",border:"1px solid #243045",borderRadius:9,padding:11}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:7}}>
+            <span style={{fontSize:12.5,fontWeight:700}}>{preview.name} — {preview.matched.length} matched</span>
+            {(()=>{const a=classifyArchetype(preview.matched.slice().sort((x,y)=>x.udAdp-y.udAdp)); return a?<span className="mono" style={{fontSize:10,color:a.color,border:`1px solid ${a.color}44`,padding:"2px 7px",borderRadius:4}}>{a.label}</span>:null;})()}
+          </div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:7}}>
+            {preview.matched.map(p=>(
+              <span key={p.n} style={{display:"inline-flex",alignItems:"center",gap:4,background:"#0d1420",border:"1px solid #1c2840",borderRadius:5,padding:"2px 7px",fontSize:11}}>
+                {pb(p.pos,true)}<span>{p.n}</span>
+              </span>
+            ))}
+          </div>
+          {preview.unmatched.length>0 && (
+            <div style={{fontSize:11,color:"#e08c5c",marginBottom:7}}>Unmatched (not in pool): {preview.unmatched.join(", ")}</div>
+          )}
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={confirm} style={{flex:1,padding:"7px 0",background:"#3ecf8e",border:"1px solid #3ecf8e",borderRadius:7,color:"#080b10",fontSize:12,fontWeight:700,cursor:"pointer"}}>✓ Add to portfolio</button>
+            <button onClick={()=>setPreview(null)} style={{padding:"7px 14px",background:"transparent",border:"1px solid #2a3446",borderRadius:7,color:"#5a6a80",fontSize:12,cursor:"pointer"}}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════
 // PORTFOLIO TAB
 // ══════════════════════════════════════════════════════
-function PortfolioTab({ teams, onAdd, onRemoveTeam, onRemovePlayer }) {
+function PortfolioTab({ teams, onAdd, onRemoveTeam, onRemovePlayer, onImportTeam }) {
   const [activeId, setActiveId] = useState(teams[0]?.id||null);
   useEffect(()=>{ if(!teams.find(t=>t.id===activeId)&&teams.length>0) setActiveId(teams[0].id); },[teams]);
   const team = teams.find(t=>t.id===activeId)||teams[0];
@@ -1266,10 +1473,45 @@ function PortfolioTab({ teams, onAdd, onRemoveTeam, onRemovePlayer }) {
   const topExp = Object.entries(expMap).sort((a,b)=>b[1]-a[1]).slice(0,16);
   const highExp = topExp.filter(([n,cnt])=>total>1&&Math.round((cnt/total)*100)>=50);
 
+  // Archetype splits across portfolio (only drafts with 5+ players)
+  const archCounts = useMemo(()=>{
+    const m = {"Zero RB":0,"Hero RB":0,"Dual RB":0,"Robust RB":0};
+    let n = 0;
+    teams.forEach(t=>{
+      const a = classifyArchetype(t.players);
+      if (a) { m[a.label]++; n++; }
+    });
+    return { m, n };
+  },[teams]);
+  const ARCH_C = {"Zero RB":"#5b9cf6","Hero RB":"#3ecf8e","Dual RB":"#f4a848","Robust RB":"#e05c5c"};
+
   return (
     <div>
+      <ImportPanel onImportTeam={onImportTeam}/>
+      {archCounts.n>0 && (
+        <div className="panel" style={{marginBottom:10}}>
+          <div className="panel-t">Construction Archetypes ({archCounts.n} classifiable draft{archCounts.n!==1?"s":""})</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {Object.entries(archCounts.m).map(([label,cnt])=>{
+              const pct = archCounts.n ? Math.round((cnt/archCounts.n)*100) : 0;
+              return (
+                <div key={label} style={{flex:"1 1 100px",background:"#0a111e",border:`1px solid ${ARCH_C[label]}33`,borderRadius:8,padding:"8px 10px",textAlign:"center"}}>
+                  <div className="mono" style={{fontSize:17,fontWeight:700,color:ARCH_C[label]}}>{pct}%</div>
+                  <div style={{fontSize:10,color:"#5a6a80",fontFamily:"DM Mono,monospace"}}>{label} ({cnt})</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{fontSize:10.5,color:"#3a4d63",marginTop:7,lineHeight:1.5}}>BBM6 winner was Hero RB. Heavy concentration in one archetype = correlated portfolio risk — your teams live and die together.</div>
+        </div>
+      )}
       <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-        {teams.map(t=><button key={t.id} className={`chip ${activeId===t.id?"chip-on":"chip-off"}`} onClick={()=>setActiveId(t.id)} style={{fontSize:11}}>{t.name} ({t.players.length})</button>)}
+        {teams.map(t=>{
+          const a = classifyArchetype(t.players);
+          return <button key={t.id} className={`chip ${activeId===t.id?"chip-on":"chip-off"}`} onClick={()=>setActiveId(t.id)} style={{fontSize:11}}>
+            {t.name} ({t.players.length}){a && <span style={{marginLeft:5,fontSize:9,color:ARCH_C[a.label]}}>{a.label.split(" ")[0]}</span>}
+          </button>;
+        })}
         <button className="chip chip-off" style={{fontSize:11}} onClick={onAdd}>+ New</button>
       </div>
       <div className="port-grid">
@@ -1379,6 +1621,7 @@ function App() {
     savePort([...portfolio,{id,name:`${name} (S${slot})`,players}]);
   };
   const addTeam = () => { const id=Date.now(); savePort([...portfolio,{id,name:`Draft ${portfolio.length+1}`,players:[]}]); };
+  const importTeam = (name, players) => { const id=Date.now(); savePort([...portfolio,{id,name,players}]); };
   const removeTeam = id => savePort(portfolio.filter(t=>t.id!==id));
   const removePlayer = (teamId,name) => savePort(portfolio.map(t=>t.id===teamId?{...t,players:t.players.filter(p=>p.n!==name)}:t));
 
@@ -1406,7 +1649,7 @@ function App() {
           />
         </div>
         {tab==="stacks" && <StacksTab onAddPick={addPick} picks={draftPicks} slot={draftSlot} teamSize={draftTeamSize} plat={draftPlat} gone={gone}/>}
-        {tab==="portfolio" && <PortfolioTab teams={portfolio} onAdd={addTeam} onRemoveTeam={removeTeam} onRemovePlayer={removePlayer}/>}
+        {tab==="portfolio" && <PortfolioTab teams={portfolio} onAdd={addTeam} onRemoveTeam={removeTeam} onRemovePlayer={removePlayer} onImportTeam={importTeam}/>}
       </div>
     </>
   );
